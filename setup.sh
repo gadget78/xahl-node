@@ -373,7 +373,7 @@ FUNC_CLONE_NODE_SETUP(){
     if [ "$XAHAU_NODE_SIZE" != "tiny" ] && [ "$XAHAU_NODE_SIZE" != "medium" ] && [ "$XAHAU_NODE_SIZE" != "huge" ] || [ "$ALWAYS_ASK" == "true" ]; then
         echo -e "${BLUE}Please choose a config option:"
         echo -e "1. sets config as \"medium\", ledgers capped at $TINY_LEDGER_HISTORY, suitable for around 6GB+ RAM, and 25GB+ HDD+ (supports some evernodes, with NO rep contracts)"
-        echo -e "2. sets config as \"huge\", ledgers capped at $MEDIUM_LEDGER_HISTORY, suitable for 16GB+ RAM, 50GBB+ SSD+ (supports many evernodes WITH contracts)"
+        echo -e "2. sets config as \"huge\", ledgers capped at $MEDIUM_LEDGER_HISTORY, suitable for 16GB+ RAM, 50GB+ SSD+ (supports many evernodes WITH contracts)"
         echo -e "3. sets config as \"huge\", with NO cap on ledger size, suitable for 32G+ RAM, 30TB+ SSD+ (supports many evernodes WITH contracts, and history API/tools${NC}"
         read -p "Enter your choice [1-3] # " choice
         
