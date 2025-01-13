@@ -119,7 +119,7 @@ cd ~/xahl-node
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 
 ###################################################################################
-# Authenticate sudo perms, and extend time out before script execution to avoid timeouts or errors.
+# Authenticate sudo permissions, and extend time out before script execution to avoid timeouts or errors.
 
 msg_info "checking privileges..."
 if ! command -v sudo &> /dev/null; then
@@ -128,7 +128,7 @@ if ! command -v sudo &> /dev/null; then
 fi
 
 if [ "$(id -u)" -eq 0 ]; then
-    msg_ok "Privileges checked, ${USER_ID} is running as root.${CL}"
+    msg_ok "Privileges checked, user /"${USER_ID}/" has root privileges.${CL}"
 
 elif sudo -l > /dev/null 2>&1; then
 
@@ -163,25 +163,28 @@ vars_version="$version"
 # you can change these to suit you needs and environment.
 # all saved question data is in .env file
 #  - for example, 
-#    always_ask, will ask all question every time, with promt of past anser, false skips if answered before
+#    always_ask, will ask all question every time, with prompt of past answer, false skips if answered before
 #    install certbot, will stop the install of the cert bot, so it can be used without the need for SSL
-#    install landingpage, having this on false, will prevent it deleteing and re-installing the landing pages (if you have a custom one)
+#    install landing page, having this on false, will prevent it deleting and re-installing the landing pages (if you have a custom one)
 #    install_toml, as above, you can force setup from messing with you .toml file
 
-# variables for size setup
-TINY_LEDGER_HISTORY="2048"
-TINY_LEDGER_DELETE="2048"
-MEDIUM_LEDGER_HISTORY="4096"
-MEDIUM_LEDGER_DELETE="4096"
+# variables for node setup
+NODE_CONFIG_FILE="/opt/xahaud/etc/xahaud.cfg"
+NODE_TYPE="node"               # can be node, nodeHistory, validator, validatorHistory
+NODE_SIZE="restricted"         # used in history TYPEs and can either be, "full" to remove all size restriction, or "restricted" which will use NODE_LEDGER_HISTORY and NODE_ONLINE_DELETE values.
+NODE_LEDGER_HISTORY="26000"
+NODE_ONLINE_DELETE="26000"
+NODE_CHAIN_NAME="mainnet"      # can be either mainnet or testnet (aka VARVAL_CHAIN_NAME)
 
-# varibles for script choices
+# variables for script choices
 ALWAYS_ASK="true"
-INSTALL_UPDATES="true"
-VARVAL_CHAIN_NAME="mainnet"
+SCRIPT_DIR="/home/xahl-node"   # by default this is now /home/, previously was always /root/ and not configurable
+INSTALL_SYS_PACKAGES="true"    # install and update all thats listed in system packages array below (this was called \$INSTALL_UPDATES in previous versions) 
 INSTALL_UFW="true"
 INSTALL_CERTBOT_SSL="true"
 INSTALL_LANDINGPAGE="true"
 INSTALL_TOML="true"
+DISPLAY_FULL_LOG="false"
 
 # ipv6 can be set to auto (default), true or false, auto uses command \`ip a | grep -c 'inet6.*::1/128'\` 
 IPv6="auto" 
@@ -190,10 +193,8 @@ IPv6="auto"
 # *** the following variables DO NOT need to be changed ***
 # *      these are for the script/nginx setups            *
 
-# ubuntu packages that the main script depends on;
-SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-requests python3-toml whois htop sysstat mlocate apache2-utils)
-
-TOMLUPDATER_URL=https://raw.githubusercontent.com/gadget78/ledger-live-toml-updating/node-dev/validator/update.py
+# system packages that the main script depends on;
+SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 whois htop sysstat mlocate apache2-utils)
 
 # variables for nginx
 NGX_CONF_ENABLED="/etc/nginx/sites-enabled/"
@@ -204,13 +205,24 @@ NGINX_PROXY_IP="192.168.0.0/16"
 
 # MAINNET
 NGX_MAINNET_RPC="6007"
-NGX_MAINNET_WSS="6009" 
+NGX_MAINNET_WSS="6009" # set to 6009 for admin port
 XAHL_MAINNET_PEER="21337"
 
 # TESTNET
 NGX_TESTNET_RPC="5009"
 NGX_TESTNET_WSS="6009"
 XAHL_TESTNET_PEER="21338"
+
+# variables for toml updater
+TOMLUPDATER_URL=https://raw.githubusercontent.com/gadget78/ledger-live-toml-updating/node-dev/validator/update.py
+
+# variables for XAHAUD AUTO UPDATER
+AUTOUPDATE_XAHAUD="true"
+AUTOUPDATE_CHECK_INTERVAL="24"
+UPDATE_SCRIPT_NAME="xahaud-silent-update.sh"
+UPDATE_SCRIPT_PATH="/usr/local/bin/\$UPDATE_SCRIPT_NAME"
+LOG_DIR="/opt/xahaud/log"
+LOG_FILE="\$LOG_DIR/update.log
 EOF
 fi
 
@@ -240,7 +252,7 @@ if [ -z "$IPv6" ]; then
     sudo sed -i "/^INSTALL_TOML=*/a\\ \n# ipv6 can be set to auto (default), true or false, auto uses command \"ip a | grep -c 'inet6.*::1/128'\"\nIPv6=\"auto\"" $SCRIPT_DIR/xahl_node.vars
 fi
 if [ -z "$vars_version" ] || [ "$vars_version" == "0.8.7" ] || [ "$vars_version" == "0.8.8" ]; then
-    vars_version=$version
+    vars_version=0.89
     sudo sed -i '/^vars_version/d' $SCRIPT_DIR/xahl_node.vars
     sudo sh -c "sed -i '1i vars_version=$version' $SCRIPT_DIR/xahl_node.vars"
     sudo sed -i "s/^NGX_MAINNET_WSS=.*/NGX_MAINNET_WSS=\"6009\"/" $SCRIPT_DIR/xahl_node.vars
@@ -250,20 +262,81 @@ if [ -z "$vars_version" ] || [ "$vars_version" == "0.8.7" ] || [ "$vars_version"
     sudo sed -i '/^# ubuntu packages that the main script depends on;/a\SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-requests python3-toml whois htop sysstat mlocate apache2-utils)' $SCRIPT_DIR/xahl_node.vars
     echo -e "${GREEN}## ${YELLOW}xahl-node.vars file updated to version 0.89... ${NC}"
 fi
-if echo "$vars_version" | awk '{ exit !($1 < 0.93) }'; then
-    vars_version=$version
-    sudo sed -i '/^vars_version/d' $SCRIPT_DIR/xahl_node.vars
-    sudo sh -c "sed -i '1i vars_version=$version' $SCRIPT_DIR/xahl_node.vars"
-    sudo sed -i "s/^TINY_LEDGER_HISTORY=.*/TINY_LEDGER_HISTORY=\"2048\"/" $SCRIPT_DIR/xahl_node.vars
-    sudo sed -i "s/^TINY_LEDGER_DELETE=.*/TINY_LEDGER_DELETE=\"2048\"/" $SCRIPT_DIR/xahl_node.vars
-    sudo sed -i "s/^MEDIUM_LEDGER_HISTORY=.*/MEDIUM_LEDGER_HISTORY=\"4096\"/" $SCRIPT_DIR/xahl_node.vars
-    sudo sed -i "s/^MEDIUM_LEDGER_DELETE=.*/MEDIUM_LEDGER_DELETE=\"4096\"/" $SCRIPT_DIR/xahl_node.vars
-    sudo sed -i '/^# ubuntu packages that the main script depends on;/a\SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-requests python3-toml whois htop sysstat mlocate apache2-utils)' $SCRIPT_DIR/xahl_node.vars
+if echo "$vars_version" | awk '{ exit !($1 < 0.94) }'; then
+    echo -e "xahl_node.vars file needs updating, importing old variables...${NC}"
+    rm -f $SCRIPT_DIR/xahl_node.vars
+    sudo cat <<EOF > $SCRIPT_DIR/xahl_node.vars
+vars_version="$version"
+# These are the default variables for the setup.sh script to use.
+# you can change these to suit you needs and environment.
+# all saved question data is in .env file
+#  - for example, 
+#    always_ask, will ask all question every time, with prompt of past answer, false skips if answered before
+#    install certbot, will stop the install of the cert bot, so it can be used without the need for SSL
+#    install landing page, having this on false, will prevent it deleting and re-installing the landing pages (if you have a custom one)
+#    install_toml, as above, you can force setup from messing with you .toml file
+
+# variables for node setup
+NODE_CONFIG_FILE="/opt/xahaud/etc/xahaud.cfg"
+NODE_TYPE="node"            # can be node, nodeHistory, validator, validatorHistory
+NODE_SIZE="restricted"      # used in history TYPEs and can either be, "full" to remove all size restriction, or "restricted" which will use NODE_LEDGER_HISTORY and NODE_ONLINE_DELETE values.
+NODE_LEDGER_HISTORY="26000"
+NODE_ONLINE_DELETE="26000"
+NODE_CHAIN_NAME="$VARVAL_CHAIN_NAME"    # can be either mainnet or testnet (aka VARVAL_CHAIN_NAME)
+
+# variables for script choices
+ALWAYS_ASK="$ALWAYS_ASK"
+SCRIPT_DIR="$SCRIPT_DIR"             # this is now /home/, previously was always /root/ and not configurable
+INSTALL_SYS_PACKAGES="$INSTALL_UPDATES"     # (aka SYS_UPDATES) install and update all thats listed in system packages array below
+INSTALL_UFW="$INSTALL_UFW"
+INSTALL_CERTBOT_SSL="$INSTALL_CERTBOT_SSL"
+INSTALL_LANDINGPAGE="$INSTALL_LANDINGPAGE"
+INSTALL_TOML="$INSTALL_TOML"
+AUTOUPDATE_XAHAUD="true"
+AUTOUPDATE_CHECK_INTERVAL="24"
+DISPLAY_FULL_LOG="false"
+
+# ipv6 can be set to auto (default), true or false, auto uses command \`ip a | grep -c 'inet6.*::1/128'\` 
+IPv6="auto" 
+
+# -------------------------------------------------------------------------------
+# *** the following variables DO NOT need to be changed ***
+# *      these are for the script/nginx setups            *
+
+# system packages that the main script depends on;
+SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 whois htop sysstat mlocate apache2-utils)
+
+# variables for nginx
+NGX_CONF_ENABLED="/etc/nginx/sites-enabled/"
+NGX_CONF_NEW="/etc/nginx/sites-available/"
+NGINX_CONF_FILE="/etc/nginx/nginx.conf"
+NGINX_ALLOWLIST_FILE="nginx_allowlist.conf"
+NGINX_PROXY_IP="$NGINX_PROXY_IP"
+
+# MAINNET
+NGX_MAINNET_RPC="6007"
+NGX_MAINNET_WSS="6009" # set to 6009 for admin port
+XAHL_MAINNET_PEER="21337"
+
+# TESTNET
+NGX_TESTNET_RPC="5009"
+NGX_TESTNET_WSS="6009"
+XAHL_TESTNET_PEER="21338"
+
+# variables for toml updater
+TOMLUPDATER_URL=https://raw.githubusercontent.com/gadget78/ledger-live-toml-updating/node-dev/validator/update.py
+
+# variables for XAHAUD AUTO UPDATER
+UPDATE_SCRIPT_NAME="xahaud-silent-update.sh"
+UPDATE_SCRIPT_PATH="/usr/local/bin/\$UPDATE_SCRIPT_NAME"
+LOG_DIR="/opt/xahaud/log"
+LOG_FILE="\$LOG_DIR/update.log"
+EOF
 fi
+
 source $SCRIPT_DIR/xahl_node.vars
 source $SCRIPT_DIR/.env
 }
-
 
 
 ######## start of Functions
@@ -276,18 +349,18 @@ FUNC_PKG_CHECK(){
     echo     
 
     # update and upgrade the system
-    if [ -z "$INSTALL_UPDATES" ]; then
-        read -p "do you want to check, and install OS updates and dependencies? Enter true or false # " INSTALL_UPDATES
-        sed -i "s/^INSTALL_UPDATES=.*/INSTALL_UPDATES=\"$INSTALL_UPDATES\"/" $SCRIPT_DIR/xahl_node.vars
+    if [ -z "$INSTALL_SYS_PACKAGES" ]; then
+        read -p "do you want to check, and install OS updates and dependencies? Enter true or false # " INSTALL_SYS_PACKAGES
+        sed -i "s/^INSTALL_SYS_PACKAGES=.*/INSTALL_SYS_PACKAGES=\"$INSTALL_SYS_PACKAGES\"/" $SCRIPT_DIR/xahl_node.vars
     fi
-    if [ "$INSTALL_UPDATES" == "true" ]; then
+    if [ "$INSTALL_SYS_PACKAGES" == "true" ]; then
         sudo apt-get update -y && sudo apt upgrade -y
 
         echo -e "${GREEN}## cycle through packages in vars file, and install... ${NC}"
         echo     
         for i in "${SYS_PACKAGES[@]}"
         do
-            hash $i &> /dev/null
+            hash $i &> /dev/null || true
             if [ $? -eq 1 ]; then
                 echo >&2 "package "$i" not found. installing...."
                 sudo apt-get install -y "$i"
@@ -297,7 +370,7 @@ FUNC_PKG_CHECK(){
         done
         echo -e "${GREEN}## ALL PACKAGES INSTALLED.${NC}"
     else
-        echo -e "${GREEN}## ${YELLOW}INSTALL_UPDATES set to false in var files, skipping... ${NC}"
+        echo -e "${GREEN}## ${YELLOW}INSTALL_SYS_PACKAGES set to false in var files, skipping... ${NC}"
     fi
     echo 
     echo -e "${GREEN}#########################################################################${NC}"
@@ -327,7 +400,7 @@ FUNC_IPV6_CHECK(){
 }
 
 FUNC_SETUP_MODE(){
-    if [ "$NODE_CHAIN_NAME" != "mainnet" ] && [ "$NODE_CHAIN_NAME" != "testnet" ]; then
+    if [[ "$NODE_CHAIN_NAME" != "mainnet" ]] && [[ "$NODE_CHAIN_NAME" != "testnet" ]]; then
         echo -e "${BLUE}NODE_CHAIN_NAME not set in $SCRIPT_DIR/xahl_node.vars"
         echo "Please choose an option:"
         echo "1. Mainnet = configures and deploys/updates xahau node for Mainnet"
@@ -380,31 +453,31 @@ FUNC_CLONE_NODE_SETUP(){
     echo -e "${GREEN}## ${YELLOW}Starting Xahau Node install... ${NC}"
     echo
 
-    if [ "$XAHAU_NODE_TYPE" != "node" ] && [ "$XAHAU_NODE_TYPE" != "history" ] && [ "$XAHAU_NODE_TYPE" != "validator" ] && [ "$XAHAU_NODE_TYPE" != "validatorHistory" ] || [ "$ALWAYS_ASK" == "true" ]; then
+    if [[ "$NODE_TYPE" != "node" ]] && [[ "$NODE_TYPE" != "history" ]] && [[ "$NODE_TYPE" != "validator" ]] && [[ "$NODE_TYPE" != "validatorHistory" ]] || [[ "$ALWAYS_ASK" == "true" ]]; then
         echo -e "${BLUE}Please choose node type:"
-        echo -e "1. \"Submission Node\", this will use RAM (and not the hard drive), suitable for 8+GB RAM (depends on connection count), 16+ HDD"
-        echo -e "2. \"History Node\", this will use the Hard drive, to keep a history of ledger, suitable for 16GB+ RAM, MUST be a Solid State Drive (space required depends on next question)"
+        echo -e "1. \"Submission Node\", this will setup the Node to use RAM for the database (and not the hard drive), perfect for submissions and slower HDD, suitable for 8+GB RAM (althou will depends on connection count), 16+ HDD"
+        echo -e "2. \"History Node\", this will use the Hard drive for the database storage, so can keep a history of ledgers, suitable for 16GB+ RAM, MUST be a Solid State Drive (space required depends on next question)"
         echo -e "3. \"Validator\", this will setup a validator, suitable for 16+GB RAM, 64GB+ SSD+ ${NC}"
         read -p "Enter your choice [1-3] # " choice
         
         case $choice in
             1) 
-                XAHAU_NODE_TYPE="node"
+                NODE_TYPE="node"
                 ;;
             2) 
-                XAHAU_NODE_TYPE="nodeHistory"
+                NODE_TYPE="nodeHistory"
                 ;;
             3) 
-                echo "Please choose validator type:"
-                echo "1. /"RAM/" type, where no history is stored."
-                echo "2. /"history/" type, where it uses the hard drive to store ledgers (space required depends on next question)"
+                echo -e "${BLUE}Please choose validator type:"
+                echo -e "1. \"RAM\" type where no history is stored."
+                echo -e "2. \"history\" type where it uses the hard drive to store ledgers (space required depends on next question)${NC}"
                 read -p "Enter your choice [1-2] # " type
                 case $type in
                     1) 
-                        XAHAU_NODE_TYPE="validator"
+                        NODE_TYPE="validator"
                         ;;
                     2) 
-                        XAHAU_NODE_TYPE="validatorHistory"
+                        NODE_TYPE="validatorHistory"
                         ;;
                     *) 
                         echo "Invalid option. Exiting."
@@ -417,18 +490,17 @@ FUNC_CLONE_NODE_SETUP(){
                 FUNC_EXIT
                 ;;
         esac
-        if sudo grep -q 'XAHAU_NODE_TYPE=' "$SCRIPT_DIR/.env"; then
-            sudo sed -i "s/^XAHAU_NODE_TYPE=.*/XAHAU_NODE_TYPE=\"$XAHAU_NODE_TYPE\"/" "$SCRIPT_DIR/.env"
+        if sudo grep -q 'NODE_TYPE=' "$SCRIPT_DIR/.env"; then
+            sudo sed -i "s/^NODE_TYPE=.*/NODE_TYPE=\"$NODE_TYPE\"/" "$SCRIPT_DIR/.env"
         else
-            sudo echo -e "XAHAU_NODE_TYPE=\"$XAHAU_NODE_TYPE\"" >> $SCRIPT_DIR/.env
-
+            sudo echo -e "NODE_TYPE=\"$NODE_TYPE\"" >> $SCRIPT_DIR/.env
         fi
     fi
 
-    if  [ "$XAHAU_NODE_TYPE" == "nodeHistory" ] || [ "$XAHAU_NODE_TYPE" == "validatorHistory" ] || [ "$ALWAYS_ASK" == "true" ]; then
-        echo "Please choose the amount of history you want to save:"
-        echo "1. restricted = this will setup a restriction on hard drive use, so by default the limit will be a days worth of ledgers, which needs roughly 40 GB of space"
-        echo "2. full = configure the settings so that there will be NO restriction of size, making it a full history node, be warned this can take up terabytes of hard drive space"
+    if  [[ "$NODE_TYPE" == "nodeHistory" && "$ALWAYS_ASK" == "true" ]] || [[ "$NODE_TYPE" == "validatorHistory" && "$ALWAYS_ASK" == "true" ]]; then
+        echo -e "${BLUE}Please choose the amount of history you want to save:"
+        echo -e "1. restricted = this will setup a restriction on hard drive use, so by default the limit will be a days worth of ledgers, which will needs roughly 64 GB of space"
+        echo -e "2. full = this will configure the settings so that there will be NO restriction of size, making it a full history node, be warned this will take up terabytes of hard drive space ${NC}"
         read -p "Enter your choice [1-2] # " choice
         
         case $choice in
@@ -446,8 +518,8 @@ FUNC_CLONE_NODE_SETUP(){
         sed -i "s/^NODE_SIZE=.*/NODE_SIZE=\"$NODE_SIZE\"/" $SCRIPT_DIR/xahl_node.vars
     fi
 
-    if [ "$XAHAU_NODE_TYPE" == "validator" ] || [ "$XAHAU_NODE_TYPE" == "validatorHistory" ]; then
-        if [[ -f "/opt/xahaud/etc/xahaud.cfg" ]] then
+    if [ "$NODE_TYPE" == "validator" ] || [ "$NODE_TYPE" == "validatorHistory" ]; then
+        if [[ -f "/opt/xahaud/etc/xahaud.cfg" ]]; then
             NODE_VALIDATOR_TOKEN=$(sed -n '/^\[validator_token\]/,/^$/ {/^$/q; /^\[validator_token\]/!{/^$/!p}}' /opt/xahaud/etc/xahaud.cfg)
         fi
         if [ -n "$NODE_VALIDATOR_TOKEN" ] && echo "$NODE_VALIDATOR_TOKEN" | grep -q '[^[:space:]]'; then
@@ -455,14 +527,18 @@ FUNC_CLONE_NODE_SETUP(){
         else
             printf "${BLUE}The [validator_token] section is empty, enter token here, or leave blank to generate one.${NC} # "
             read -e -i "$NODE_VALIDATOR_TOKEN" NODE_VALIDATOR_TOKEN
+            echo
             if [[ -z "$NODE_VALIDATOR_TOKEN" ]]; then
                 if ! [[ -f "/opt/xahaud/bin/validator-keys" ]]; then
+                    echo "downloading key generator"
                     sudo wget -O /opt/xahaud/bin/validator-keys https://raw.githubusercontent.com/Xahau/mainnet-docker/main/utilities/validator-keys
                     sudo chmod +x /opt/xahaud/bin/validator-keys
                 fi
                 if ! [[ -f  "~/.ripple/validator-keys.json" ]]; then
+                    echo "generating keys"
                     /opt/xahaud/bin/validator-keys create_keys >/dev/null
                 fi
+                echo "generating token"
                 NODE_VALIDATOR_TOKEN=$(/opt/xahaud/bin/validator-keys create_token --keyfile ~/.ripple/validator-keys.json | sed -n '/^\[validator_token\]/,/^$/ {/^$/q; /^\[validator_token\]/!{/^$/!p}}')
             fi
             if sudo grep -q 'NODE_VALIDATOR_TOKEN=' "$SCRIPT_DIR/.env"; then
@@ -485,21 +561,22 @@ FUNC_CLONE_NODE_SETUP(){
     fi
     if [ -d "/opt/xahaud/" ]; then
         echo "previous xahaud node install found,"
-        echo "will stop existing xahaud, check for updates..."
+        echo "will stop existing xahaud, and check for updates..."
         sudo systemctl stop xahaud
     fi
 
     cd $SCRIPT_DIR/$VARVAL_CHAIN_REPO
     sudo ./xahaud-install-update.sh
-    rm -f /opt/xahaud/etc/xahaud.cfg
+    rm -f /opt/xahaud/etc/xahaud.cfg > /dev/null
+    rm -f -r /opt/xahaud/db > /dev/null
     
-    if [[ "$XAHAU_NODE_TYPE" == "nodeHistory" || "$XAHAU_NODE_TYPE" == "validatorHistory" ]]; then 
+    if [[ "$NODE_TYPE" == "nodeHistory" || "$NODE_TYPE" == "validatorHistory" ]]; then 
         echo
         echo -e "setting up HDD node...${NC}"
         echo
         if [ "$NODE_SIZE" == "full" ]; then
-            XAHAU_LEDGER_HISTORY="full"
-            XAHAU_ONLINE_DELETE=""
+            NODE_LEDGER_HISTORY="full"
+            NODE_ONLINE_DELETE=""
         fi
         NODE_DB_TYPE="NuDB"
         NODE_DB_PATH="path=/opt/xahaud/db/nudb"
@@ -510,8 +587,8 @@ FUNC_CLONE_NODE_SETUP(){
         echo -e "setting up RAM type node...${NC}"
         echo
 
-        XAHAU_LEDGER_HISTORY="256"
-        XAHAU_ONLINE_DELETE="256"
+        NODE_LEDGER_HISTORY="256"
+        NODE_ONLINE_DELETE="256"
         NODE_DB_TYPE="rwdb"
         NODE_DB_PATH=""
         NODE_DB_RELATIONAL="backend=rwdb"
@@ -571,12 +648,12 @@ huge
 
 [node_db]
 advisory_delete=0
-online_delete=$XAHAU_ONLINE_DELETE
+online_delete=$NODE_ONLINE_DELETE
 type=$NODE_DB_TYPE
 $NODE_DB_PATH
 
 [ledger_history]
-$XAHAU_LEDGER_HISTORY
+$NODE_LEDGER_HISTORY
 
 [database_path]
 /opt/xahaud/db
@@ -613,7 +690,7 @@ owner_reserve = 200000
 
 EOF
 
-    if [ "$XAHAU_NODE_TYPE" == "validator" ] || [ "$XAHAU_NODE_TYPE" == "validatorHistory" ]; then
+    if [ "$NODE_TYPE" == "validator" ] || [ "$NODE_TYPE" == "validatorHistory" ]; then
         echo "[validator_token]" >> /opt/xahaud/etc/xahaud.cfg
         echo "$NODE_VALIDATOR_TOKEN" >> /opt/xahaud/etc/xahaud.cfg
     fi
@@ -730,16 +807,16 @@ EOF
         # Make the update script executable
         chmod +x "$UPDATE_SCRIPT_PATH"
 
-        cron_job="0 */${AUTOUPDATE_CHECK_INTERVAL} * * * root sleep \$((RANDOM*3540/32768)) && \$UPDATE_SCRIPT_PATH >> \$LOG_FILE 2>&1"
+        cron_job="0 */${AUTOUPDATE_CHECK_INTERVAL} * * * root sleep \$((RANDOM*3540/32768)) && $UPDATE_SCRIPT_PATH >> $LOG_FILE 2>&1"
         existing_crontab=$(crontab -l 2>/dev/null) || existing_crontab=""
-        if echo "$existing_crontab" | grep -q "* * * root sleep \$((RANDOM*3540/32768))"; then
-            existing_crontab=$(echo "$existing_crontab" | sed '/\* \* \* root sleep \$((RANDOM\*3540\/32768))/d')
+        if echo "$existing_crontab" | grep -q "$UPDATE_SCRIPT_PATH"; then
+            existing_crontab=$(echo "$existing_crontab" | grep -v "$UPDATE_SCRIPT_PATH")
             existing_crontab="${existing_crontab}"$'\n'"${cron_job}"
             echo "$existing_crontab" | crontab -
             msg_ok "updated cron tab tasks, system will now check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours"
         else
             (sudo crontab -l; echo "$cron_job") | sudo crontab -
-            msg_ok "added new entry to cron tab tasks, system will now check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours"
+            msg_ok "added new entry to cron tab tasks, system will check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours"
         fi
     else
         msg_error "NOT adding AutoUpdate functions, due to AUTOUPDATE_XAHAUD set to ${AUTOUPDATE_XAHAUD} in xahl_node.vars file"
@@ -817,7 +894,7 @@ FUNC_ENABLE_UFW(){
     echo 
     echo -e "${GREEN}## ${YELLOW}Setup: (re)Enable Firewall...${NC}"
     echo 
-    sudo systemctl start ufw && sudo systemctl status ufw verbose --no-page
+    sudo systemctl start ufw && sudo systemctl status ufw --no-page
     echo "y" | sudo ufw enable
     #sudo ufw enable
     sudo ufw status verbose --no-page
@@ -1092,7 +1169,7 @@ footer a:hover {
             <p>Connected peers: <span id="peers">...</span></p>
             <p>Current Ledger: <span id="currentLedger">...</span></p>
             <p>Complete Ledgers: <span id="completeLedgers">...</span></p>
-            <p>Node Size: <span id="nodeSize">...</span></p>
+            <p>Node type: <span id="nodeType">...</span></p>
             <p>UpTime: <span id="uptime">...</span></p>
             <p>Last Refresh: <span id="time">...</span></p>
             <canvas id="myChart">...</canvas>
@@ -1205,7 +1282,8 @@ footer a:hover {
             const parsedTOML = await parseTOML(toml);
             document.getElementById('rawTOML').textContent = toml;
             document.getElementById('connections').textContent = await parsedTOML.STATUS.CONNECTIONS;
-            document.getElementById('nodeSize').textContent = await parsedTOML.STATUS.NODESIZE;
+            document.getElementById('nodeType').textContent = await parsedTOML.STATUS.NODETYPE;
+            document.getElementById('status').textContent = await parsedTOML.STATUS.STATUS || "failed, server could be down?";
             percentageCPU = await parsedTOML.STATUS.CPU;
             percentageCPU = percentageCPU.replace("[", "").replace("]", "").split(",");
             percentageRAM = await parsedTOML.STATUS.RAM;
@@ -1240,7 +1318,6 @@ footer a:hover {
         .then(serverInfo => {
             const formattedJson = JSON.stringify(serverInfo, null, 2);
             document.getElementById('serverInfo').textContent = formattedJson;
-            document.getElementById('status').textContent = serverInfo.result.status || "failed, server could be down?";
             document.getElementById('serverstate').textContent = serverInfo.result.info.server_state;
             document.getElementById('statecount').textContent = serverInfo.result.info.state_accounting.full.transitions;
             document.getElementById('buildVersion').textContent = serverInfo.result.info.build_version;
@@ -1510,7 +1587,7 @@ footer a:hover {
                 <p>Connected Peers: <span id="peers">...</span></p>
                 <p>Current Ledger: <span id="currentLedger">...</span></p>
                 <p>Complete Ledgers: <span id="completedLedgers">...</span></p>
-                <p>Node Size: <span id="nodeSize">...</span></p>
+                <p>Node Type: <span id="nodeType">...</span></p>
                 <p>UpTime: <span id="uptime">...</span></p>
                 <p>Last Refresh: <span id="time">...</span></p>
                 <canvas id="myChart">...</canvas>
@@ -1642,7 +1719,7 @@ footer a:hover {
                 document.getElementById('peers').textContent = await parsedTOML.STATUS.PEERS;
                 document.getElementById('currentLedger').textContent = await parsedTOML.STATUS.CURRENTLEDGER;
                 document.getElementById('completedLedgers').textContent = await parsedTOML.STATUS.LEDGERS;
-                document.getElementById('nodeSize').textContent = await parsedTOML.STATUS.NODESIZE;
+                document.getElementById('nodeType').textContent = await parsedTOML.STATUS.NODETYPE;
                 document.getElementById('uptime').textContent = await parsedTOML.STATUS.UPTIME;
                 document.getElementById('time').textContent = days+"days "+hours+"hours and "+mins+"mins ago";
 
@@ -1836,6 +1913,9 @@ EOF
     fi
     echo
     sleep 2s
+
+    # run the .toml uppdater to get fresh new data in file.
+    /usr/bin/python3 /root/xahl-node/updater.py
 }
 
 
@@ -1848,9 +1928,10 @@ FUNC_ALLOWLIST_CHECK(){
 
     # Get some source IPs
     #current SSH session
-    SRC_IP=$(echo $SSH_CONNECTION | awk '{print $1}')
-    if [ -z "$SRC_IP" ]; then
-        SRC_IP="127.0.0.1"
+    if [[ -n "${SSH_CONNECTION-}" ]]; then
+        SSH_IP=$(echo $SSH_CONNECTION | awk '{print $1}')
+    else
+        SSH_IP="127.0.0.1"
     fi
     #this Nodes IP
     NODE_IP=$(curl -s ipinfo.io/ip)
@@ -1866,11 +1947,11 @@ FUNC_ALLOWLIST_CHECK(){
 
     echo "adding default IPs..."
     echo
-    if ! grep -q "allow $SRC_IP;  # Detected IP of the SSH session" "$SCRIPT_DIR/nginx_allowlist.conf"; then
-        echo "allow $SRC_IP;  # Detected IP of the SSH session" >> $SCRIPT_DIR/nginx_allowlist.conf
-        echo "added IP $SRC_IP;  # Detected IP of the SSH session"
+    if ! grep -q "allow $SSH_IP;  # Detected IP of the SSH session" "$SCRIPT_DIR/nginx_allowlist.conf"; then
+        echo "allow $SSH_IP;  # Detected IP of the SSH session" >> $SCRIPT_DIR/nginx_allowlist.conf
+        echo "added IP $SSH_IP;  # Detected IP of the SSH session"
     else
-        echo "SSH session IP, $SRC_IP, already in list."
+        echo "SSH session IP, $SSH_IP, already in list."
     fi
     if ! grep -q "allow $LOCAL_IP; # Local IP of server" "$SCRIPT_DIR/nginx_allowlist.conf"; then
         echo "allow $LOCAL_IP; # Local IP of server" >> $SCRIPT_DIR/nginx_allowlist.conf
@@ -1887,10 +1968,11 @@ FUNC_ALLOWLIST_CHECK(){
     echo
     echo
     if [ "$ALWAYS_ASK" == "true" ]; then
-        echo -e "${BLUE}here we add additional IPs to the Allowlist... ${NC}"
+        echo -e "${BLUE}here you can add additional IPs to the Allowlist file..."
+        echo -e "if you want to disable the whitelist feature, add ip 0.0.0.0 ${NC}"
         echo
         while true; do
-            printf "${BLUE}Enter an additional IP address (one at a time for example 10.0.0.20, or just press enter to skip) ${NC}# " 
+            printf "${BLUE}Enter additional IP address (one at a time for example 10.0.0.20, or just press enter to skip) ${NC}# " 
             read -e user_ip
 
             # Validate the input using regex
@@ -2271,11 +2353,10 @@ FUNC_NODE_DEPLOY(){
     echo -e "${GREEN}#########################################################################${NC}"
     echo -e "${YELLOW}#########################################################################${NC}"
     echo -e "${GREEN}${NC}"
-    echo -e "${GREEN}         Xahau ${BYELLOW}$NODE_CHAIN_NAME${GREEN} RPC/WSS Node - Install${NC}"
+    echo -e "${GREEN}         Xahau ledger Node - Install${NC}"
     echo -e "${GREEN}${NC}"
     echo -e "${YELLOW}#########################################################################${NC}"
     echo -e "${GREEN}#########################################################################${NC}"
-    sleep 3s
 
     # check for .vars file, and set other variables
     FUNC_VARS_VARIABLE_CHECK;
@@ -2295,14 +2376,14 @@ FUNC_NODE_DEPLOY(){
     # prompts the user for domain name, and email address for cert_bot if needed 
     FUNC_PROMPTS_4_DOMAINS_EMAILS;
 
-    # setup and install the landing page, request public email if needed, and add CRON job entry
-    FUNC_INSTALL_LANDINGPAGE;
-
     # add/check allowList, ask for additional IPs if configured to do so
     FUNC_ALLOWLIST_CHECK;
 
     # main Xahau Node setup
     FUNC_CLONE_NODE_SETUP;
+
+    # setup and install the landing page, request public email if needed, and add CRON job entry
+    FUNC_INSTALL_LANDINGPAGE;
 
     # install xahaud auto updater
     FUNC_XAHAUD_UPDATER;
@@ -2328,10 +2409,6 @@ FUNC_NODE_DEPLOY(){
     echo
     echo -e "${GREEN}## ${YELLOW}Setup: removed old files, create and enabled a new Nginx configuration file${NC}"
     echo
-    if  [ -z "$ORIGINAL_USER_ID" ]; then 
-      echo -e "${GREEN}## ${YELLOW}Setup: just applying corrective ownership... ${NC}"
-      sudo chown -R $ORIGINAL_USER_ID:users $SCRIPT_DIR
-    fi
     echo
     echo -e "${GREEN}#########################################################################${NC}"
     echo
@@ -2350,7 +2427,6 @@ FUNC_NODE_DEPLOY(){
     echo -e "${GREEN}## ${YELLOW}Setup complete.${NC}"
     echo
     echo
-
 
     FUNC_EXIT
 }
