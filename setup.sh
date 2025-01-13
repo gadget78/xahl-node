@@ -179,7 +179,7 @@ NODE_CHAIN_NAME="mainnet"      # can be either mainnet or testnet (aka VARVAL_CH
 
 # variables for script choices
 ALWAYS_ASK="true"
-SCRIPT_DIR="/home/xahl-node"   # by default this is now /home/, previously was always /root/ and not configurable
+SCRIPT_DIR="/~/xahl-node"      # by default this is now /home/, previously was always /root/ and not configurable
 INSTALL_SYS_PACKAGES="true"    # install and update all thats listed in system packages array below (this was called \$INSTALL_UPDATES in previous versions) 
 INSTALL_UFW="true"
 INSTALL_CERTBOT_SSL="true"
@@ -223,7 +223,7 @@ AUTOUPDATE_CHECK_INTERVAL="24"
 UPDATE_SCRIPT_NAME="xahaud-silent-update.sh"
 UPDATE_SCRIPT_PATH="/usr/local/bin/\$UPDATE_SCRIPT_NAME"
 LOG_DIR="/opt/xahaud/log"
-LOG_FILE="\$LOG_DIR/update.log
+LOG_FILE="\$LOG_DIR/update.log"
 EOF
 fi
 
@@ -288,7 +288,7 @@ NODE_CHAIN_NAME="$VARVAL_CHAIN_NAME"    # can be either mainnet or testnet (aka 
 
 # variables for script choices
 ALWAYS_ASK="$ALWAYS_ASK"
-SCRIPT_DIR="$SCRIPT_DIR"             # this is now /home/, previously was always /root/ and not configurable
+SCRIPT_DIR="$SCRIPT_DIR"                    # this is now /home/xahl-node by default, previously was always /root/xahl-root and not configurable
 INSTALL_SYS_PACKAGES="$INSTALL_UPDATES"     # (aka SYS_UPDATES) install and update all thats listed in system packages array below
 INSTALL_UFW="$INSTALL_UFW"
 INSTALL_CERTBOT_SSL="$INSTALL_CERTBOT_SSL"
@@ -2049,7 +2049,7 @@ set_real_ip_from $NGINX_PROXY_IP;
 real_ip_header X-Real-IP;
 real_ip_recursive on;
 server {
-    server_name _;
+    server_name $USER_DOMAIN;
 
     # Additional settings, including HSTS
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
