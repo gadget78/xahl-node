@@ -1160,7 +1160,8 @@ footer a:hover {
 <!--    <div class="tab-buttons" id="tab-buttons">
         <button class="tab-button active" onclick="openTab('tab1')">Server Info</button>
         <button class="tab-button" id="tab2-button" onclick="openTab('tab2')">Uptime Kuma</button>
--->    </div>
+        </div>
+-->
     <div id="tab1" class="tab active">
         <div class="serverinfo">
             <p>Status: <span id="status">loading server data..</span></p>
@@ -1572,7 +1573,8 @@ footer a:hover {
 <!--    <div class="tab-buttons" id="tab-buttons">
         <button class="tab-button active" onclick="openTab('tab1')">Server Info</button>
         <button class="tab-button" id="tab2-button" onclick="openTab('tab2')">Uptime Kuma</button>
--->    </div>
+        </div>
+-->
         <div id="tab1" class="tab active">
             <div class="serverinfo">
                 <h1>Server Info</h1>
