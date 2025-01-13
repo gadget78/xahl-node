@@ -195,7 +195,7 @@ IPv6="auto"
 # *      these are for the script/nginx setups            *
 
 # system packages that the main script depends on;
-SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 whois htop sysstat mlocate apache2-utils)
+SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-pip whois htop sysstat mlocate apache2-utils)
 
 # variables for nginx
 NGX_CONF_ENABLED="/etc/nginx/sites-enabled/"
@@ -306,7 +306,7 @@ IPv6="auto"
 # *      these are for the script/nginx setups            *
 
 # system packages that the main script depends on;
-SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 whois htop sysstat mlocate apache2-utils)
+SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-pip whois htop sysstat mlocate apache2-utils)
 
 # variables for nginx
 NGX_CONF_ENABLED="/etc/nginx/sites-enabled/"
@@ -356,20 +356,33 @@ FUNC_PKG_CHECK(){
         sed -i "s/^INSTALL_SYS_PACKAGES=.*/INSTALL_SYS_PACKAGES=\"$INSTALL_SYS_PACKAGES\"/" $SCRIPT_DIR/xahl_node.vars
     fi
     if [ "$INSTALL_SYS_PACKAGES" == "true" ]; then
-        sudo apt-get update -y && sudo apt upgrade -y
+        msg_info "carrying out apt-get update"
+        sudo apt-get update -y 2>&1 | awk '{ printf "\r\033[K   checking updates.. "; printf "%s", $0; fflush() }'
+        msg_ok "apt-get updates finished"
+        msg_info "carrying out any needed upgrades"
+        sudo apt upgrade -y 2>&1 | awk '{ printf "\r\033[K   checking upgrades.. "; printf "%s", $0; fflush() }'
+        msg_ok "all upgrades finished"
+        echo
 
         echo -e "${GREEN}## cycle through packages in vars file, and install... ${NC}"
-        echo     
+        apt-get update >/dev/null 2>&1
         for i in "${SYS_PACKAGES[@]}"
         do
-            hash $i &> /dev/null || true
-            if [ $? -eq 1 ]; then
-                echo >&2 "package "$i" not found. installing...."
-                sudo apt-get install -y "$i"
+            if ! command -v $i &> /dev/null; then
+                msg_info "installing $i...                                                                                  "
+                apt-get install -y $i 2>&1 | awk '{ printf "\r\033[K   installing $i.. "; printf "%s", $0; fflush() }'
+                msg_ok "$i installed."
             else
-                echo "package "$i" exist, proceeding to next...."
+                msg_ok "$i already installed"
             fi
         done
+        echo
+
+        echo -e "${GREEN}## check python packages, and install... ${NC}"
+        msg_info "checkng python modules..."
+        sudo pip3 install requests toml 2>&1 | awk '{ printf "\r\033[K   checking updates.. "; printf "%s", $0; fflush() }'
+        msg_ok "python modules, toml, requests, all installed"
+        echo
         echo -e "${GREEN}## ALL PACKAGES INSTALLED.${NC}"
     else
         echo -e "${GREEN}## ${YELLOW}INSTALL_SYS_PACKAGES set to false in var files, skipping... ${NC}"
@@ -817,7 +830,7 @@ EOF
             echo "$existing_crontab" | crontab -
             msg_ok "updated cron tab tasks, system will now check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours"
         else
-            (sudo crontab -l; echo "$cron_job") | sudo crontab -
+            (sudo crontab -l 2>/dev/null; echo "$cron_job") | sudo crontab -
             msg_ok "added new entry to cron tab tasks, system will check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours"
         fi
     else
@@ -1846,10 +1859,10 @@ EOF
     sudo chmod +x /root/xahl-node/updater.py
     cron_job="*/15 * * * * /usr/bin/python3 /root/xahl-node/updater.py"
     echo
-    if sudo crontab -l | grep -Fxq "$cron_job"; then
+    if sudo crontab -l 2>/dev/null| grep -Fxq "$cron_job"; then
         echo -e "${GREEN}## ${YELLOW}Setup: Cron job for .toml updater already exists. No changes made. ${NC}"
     else
-        (sudo crontab -l; echo "$cron_job") | sudo crontab -
+        (sudo crontab -l 2>/dev/null; echo "$cron_job") | sudo crontab -
         echo -e "${GREEN}## ${YELLOW}Setup: Cron job for .toml updater added successfully."
     fi
 
@@ -2009,13 +2022,12 @@ FUNC_NGINX_CLEAR_RECREATE() {
     echo -e "${GREEN}#########################################################################${NC}"
     echo
     echo -e "${GREEN}## ${YELLOW}Checking and installing NGINX... ${NC}"
-    nginx -v 
-    if [ $? != 0 ]; then
-        echo -e "${GREEN}## ${YELLOW}NGINX is not installed. Installing now...${NC}"
-        apt-get update -y
-        sudo apt-get install nginx -y
+    if ! command -v nginx &> /dev/null; then
+        msg_info_ "installing nginx...                                                                                  "
+        apt-get update >/dev/null 2>&1
+        apt-get install -y nginx 2>&1 | awk '{ printf "\r\033[K   installing nginx.. "; printf "%s", $0; fflush() }'
+        msg_ok "nginx installed."
     else
-        # If NGINX is already installed.. skipping
         echo -e "${GREEN}## NGINX is already installed... ${NC}"
     fi
     
