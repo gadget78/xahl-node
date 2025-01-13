@@ -157,6 +157,7 @@ fi
 FUNC_VARS_VARIABLE_CHECK(){
 if [  ! -f $SCRIPT_DIR/xahl_node.vars ]; then
     echo -e "$SCRIPT_DIR/xahl_node.vars file missing, generating a new one...${NC}"
+    mkdir -p $SCRIPT_DIR
     sudo cat <<EOF > $SCRIPT_DIR/xahl_node.vars
 vars_version="$version"
 # These are the default variables for the setup.sh script to use.
@@ -227,6 +228,7 @@ EOF
 fi
 
 source $SCRIPT_DIR/xahl_node.vars
+mkdir -p $SCRIPT_DIR
 touch $SCRIPT_DIR/.env
 source $SCRIPT_DIR/.env
 
