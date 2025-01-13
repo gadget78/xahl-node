@@ -970,9 +970,9 @@ FUNC_CERTBOT_REQUEST(){
 }
 
 FUNC_PROMPTS_4_DOMAINS_EMAILS() {
-    if [ -z "$USER_DOMAIN" ] || [ "$ALWAYS_ASK" == "true" ]; then
+    if [ -z "${USER_DOMAIN-}" ] || [ "$ALWAYS_ASK" == "true" ]; then
         printf "${BLUE}Enter your servers domain (e.g. mydomain.com or a subdomain like xahau.mydomain.com )${NC} # "
-        read -e -i "$USER_DOMAIN" USER_DOMAIN
+        read -e -i "${USER_DOMAIN-}" USER_DOMAIN
         if sudo grep -q 'USER_DOMAIN=' "$SCRIPT_DIR/.env"; then
             sudo sed -i "s/^USER_DOMAIN=.*/USER_DOMAIN=\"$USER_DOMAIN\"/" "$SCRIPT_DIR/.env"
         else
@@ -981,10 +981,10 @@ FUNC_PROMPTS_4_DOMAINS_EMAILS() {
     fi
 
     # Prompt for CERT email if not provided as a variable
-    if [ -z "$CERT_EMAIL" ] || [ "$ALWAYS_ASK" == "true" ] || [ "$INSTALL_CERTBOT_SSL" == "true" ]; then
+    if [ -z "${CERT_EMAIL-}" ] || [ "$ALWAYS_ASK" == "true" ] || [ "$INSTALL_CERTBOT_SSL" == "true" ]; then
         echo
         printf "${BLUE}Enter your email address for certbot updates ${NC}# "
-        read -e -i "$CERT_EMAIL" CERT_EMAIL
+        read -e -i "${CERT_EMAIL-}" CERT_EMAIL
         if sudo grep -q 'CERT_EMAIL=' "$SCRIPT_DIR/.env"; then
             sudo sed -i "s/^CERT_EMAIL=.*/CERT_EMAIL=\"$CERT_EMAIL\"/" "$SCRIPT_DIR/.env"
         else
@@ -1157,10 +1157,10 @@ footer a:hover {
 <body>
 <div id="content">
     <h1>Xahau Node Landing Page</h1>
-    <div class="tab-buttons" id="tab-buttons">
+<!--    <div class="tab-buttons" id="tab-buttons">
         <button class="tab-button active" onclick="openTab('tab1')">Server Info</button>
         <button class="tab-button" id="tab2-button" onclick="openTab('tab2')">Uptime Kuma</button>
-    </div>
+-->    </div>
     <div id="tab1" class="tab active">
         <div class="serverinfo">
             <p>Status: <span id="status">loading server data..</span></p>
@@ -1569,10 +1569,10 @@ footer a:hover {
 <body>
     <div id="content">
         <h1>Xahau Node Landing Page</h1>
-        <div class="tab-buttons" id="tab-buttons">
-            <button class="tab-button active" onclick="openTab('tab1')">Server Info</button>
-            <button class="tab-button" id="tab2-button" onclick="openTab('tab2')">Uptime Kuma</button>
-        </div>
+<!--    <div class="tab-buttons" id="tab-buttons">
+        <button class="tab-button active" onclick="openTab('tab1')">Server Info</button>
+        <button class="tab-button" id="tab2-button" onclick="openTab('tab2')">Uptime Kuma</button>
+-->    </div>
         <div id="tab1" class="tab active">
             <div class="serverinfo">
                 <h1>Server Info</h1>
@@ -1864,10 +1864,10 @@ EOF
     if [ "$INSTALL_TOML" == "true" ]; then
         
         # Prompt for user email if not provided as a variable
-        if [ -z "$TOML_EMAIL" ] || [ "$ALWAYS_ASK" == "true" ]; then
+        if [ -z "${TOML_EMAIL-}" ] || [ "$ALWAYS_ASK" == "true" ]; then
             echo
             printf "${BLUE}Enter your email address for the PUBLIC .toml file ${NC}# "
-            read -e -i "$TOML_EMAIL" TOML_EMAIL
+            read -e -i "${TOML_EMAIL-}" TOML_EMAIL
             sudo sed -i "s/^TOML_EMAIL=.*/TOML_EMAIL=\"$TOML_EMAIL\"/" $SCRIPT_DIR/.env
             if sudo grep -q 'TOML_EMAIL=' "$SCRIPT_DIR/.env"; then
                 sudo sed -i "s/^TOML_EMAIL=.*/TOML_EMAIL=\"$TOML_EMAIL\"/" "$SCRIPT_DIR/.env"
