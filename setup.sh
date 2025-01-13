@@ -1,64 +1,157 @@
 #!/bin/bash
-version=0.93
+version=0.95
 
-# *** check and setup permissions ***
-# Get current user id and store as var
+###################################################################################
+# setup message, variables, and functions for script.
+# 
+
+# Set Color Vars
+color() {
+    GREEN='\033[0;32m'
+    RED='\033[0;91m'  # Intense Red
+    YELLOW='\033[0;33m'
+    BYELLOW='\033[1;33m'
+    BLUE='\033[0;94m'
+    NC='\033[0m' # No Color
+
+    YW=$(echo "\033[33m")
+    BL=$(echo "\033[36m")
+    RD=$(echo "\033[01;31m")
+    BGN=$(echo "\033[4;92m")
+    GN=$(echo "\033[1;92m")
+    DGN=$(echo "\033[32m")
+    CL=$(echo "\033[m")
+    CM="${GN}✓${CL}"
+    CROSS="${RD}✗${CL}"
+    BFR="\\r\\033[K"
+    HOLD=" "
+}
+export -f color
+color
+
+spinner() {
+    local chars="/-\|"
+    local spin_i=0
+    printf "\e[?25l"
+    while true; do
+        printf "\r \e[36m%s\e[0m" "${chars:spin_i++%${#chars}:1}"
+        sleep 0.1
+    done
+}
+export -f spinner
+
+msg_info() {
+  if [[ -n "$SPINNER_PID" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then kill $SPINNER_PID > /dev/null && printf "\e[?25h"; fi
+  local msg="$1"
+  echo -ne " ${HOLD} ${YW}${msg}   "
+  spinner &
+  SPINNER_PID=$!
+}
+export -f msg_info
+
+msg_ok() {
+  if [[ -n "$SPINNER_PID" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then kill $SPINNER_PID > /dev/null && printf "\e[?25h"; fi
+  local msg="$1"
+  echo -e "${BFR} ${CM} ${GN}${msg}${CL}"
+}
+export -f msg_ok
+
+msg_error() {
+  if [[ -n "$SPINNER_PID" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then kill $SPINNER_PID > /dev/null && printf "\e[?25h"; fi
+  local msg="$1"
+  echo -e "${BFR} ${CROSS} ${RD}${msg}${CL}"
+}
+export -f msg_error
+
+# setup error catching
+export SPINNER_PID=""
+set -Eeuo pipefail
+trap 'error_handler $LINENO "$BASH_COMMAND"' ERR
+trap cleanup EXIT
+trap SIGINT_EXIT SIGINT
+error_handler() {
+    # clear
+    if [[ -n "$SPINNER_PID" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then kill $SPINNER_PID > /dev/null && printf "\e[?25h"; fi
+    local exit_code="$?"
+    local line_number="$1"
+    local command="$2"
+    local error_message="${RD}[ERROR]${CL} in line ${RD}$line_number${CL}: exit code ${RD}$exit_code${CL}: while executing command ${YW}$command${CL}"
+    echo -e "\n$error_message\n"
+    msg_error "an error occured, see above, cleared created temp directoy ($TEMP_DIR), and cleanly exiting..."
+}
+cleanup() {
+    if [[ -n "${SPINNER_PID// }" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then kill $SPINNER_PID > /dev/null && printf "\e[?25h"; fi
+    popd >/dev/null
+    sudo sh -c 'rm -f /etc/sudoers.d/node_setup'
+    rm -rf $TEMP_DIR
+    stty sane
+}
+exit-script() {
+    cleanup
+    echo -e "⚠  User exited script \n"
+    exit
+}
+
+SIGINT_EXIT(){
+    cleanup
+    exit 1
+}
+
+FUNC_EXIT(){
+    cleanup
+
+    bash ~/.profile
+    sudo -u $USER_ID sh -c 'bash ~/.profile'
+	exit 0
+}
+FUNC_EXIT_ERROR(){
+	exit 1
+}
+
+INTEGER='^[0-9]+([.][0-9]+)?$'
+FDATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 USER_ID=$(getent passwd $EUID | cut -d: -f1)
-
-# Authenticate sudo perms before script execution to avoid timeouts or errors
-echo "checking privileges..."
-if sudo -l > /dev/null 2>&1; then
-    echo "privleges all good..."
-    echo "just going to extend the timeout period, so sudo privleges do not timeout while installing.."
-    # extend sudo timeout for USER_ID to an hour, instead of default 5min
-    echo "Defaults:$USER_ID timestamp_timeout=120" > /tmp/xahlsudotmp
-    # add visudo check ? 
-    sudo sh -c 'cat /tmp/xahlsudotmp > /etc/sudoers.d/xahlnode_deploy'
-
-else
-    if [ -f "/root/xahl-node/setup.sh" ]; then
-        echo
-        echo "this user ($USER_ID) does not have full sudo privilages, going to try root user..."
-        if su -c "./setup.sh $USER_ID" root; then
-            exit
-        else
-            if [ $? -eq 1 ]; then
-            echo
-            echo "Incorrect password for root user."
-            else
-            echo 
-            echo "Failed to execute the script with "root" user ID."
-            echo "please log into a user with root privledges and try again."
-            exit
-            fi
-        fi
-    else
-        echo 
-        echo "this user ($USER_ID) does not have full sudo privilages"
-        echo "please log into a user with root privledges and try again."
-        exit
-    fi
-fi
-
-
-# *** SETUP INITIAL VARIABLES THAT THIS SCRiPT NEEDS
-
-# Set Colour Vars
-GREEN='\033[0;32m'
-#RED='\033[0;31m'
-RED='\033[0;91m'  # Intense Red
-YELLOW='\033[0;33m'
-BYELLOW='\033[1;33m'
-BLUE='\033[0;94m'
-NC='\033[0m' # No Color
-
-# Get the absolute path of the script directory
-# and import variables
-
+TEMP_DIR=$(mktemp -d)
+pushd $TEMP_DIR >/dev/null
 cd ~
 sudo mkdir -p xahl-node
 cd ~/xahl-node
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
+###################################################################################
+# Authenticate sudo perms, and extend time out before script execution to avoid timeouts or errors.
+
+msg_info "checking privileges..."
+if ! command -v sudo &> /dev/null; then
+    msg_error "sudo is not installed. Please install sudo and rerun the script. (to install sudo, you will need to be logged in as root user, then run this command \"apt update && apt install sudo -y\" )"
+    exit 1
+fi
+
+if [ "$(id -u)" -eq 0 ]; then
+    msg_ok "Privileges checked, ${USER_ID} is running as root.${CL}"
+
+elif sudo -l > /dev/null 2>&1; then
+
+    TIMEOUT=120  # Timeout in minutes
+
+    # Validate and apply sudoers timeout update
+    echo "Defaults:$USER_ID timestamp_timeout=$TIMEOUT" > "${TEMP_DIR}/node_setup"
+    if visudo -cf "${TEMP_DIR}/node_setup"; then
+        sudo cp "${TEMP_DIR}/node_setup" /etc/sudoers.d/node_setup
+        msg_ok "${USER_ID} logged in, root privileges obtained, and timeout extended to $TIMEOUT minutes."
+    else
+        msg_error "${USER_ID} logged in, but an error occurred setting up sudoers configuration to extend timeout. Aborting."
+        rm -f "${TEMP_DIR}/node_setup"
+        exit 1
+    fi
+    rm -f "${TEMP_DIR}/node_setup"
+
+else
+    msg_error "This script requires root or sudo privileges."
+    exit 1
+fi
+
+
 
 # Check for the .var file, if not present, generate a default one
 FUNC_VARS_VARIABLE_CHECK(){
@@ -67,7 +160,7 @@ if [  ! -f $SCRIPT_DIR/xahl_node.vars ]; then
     sudo cat <<EOF > $SCRIPT_DIR/xahl_node.vars
 vars_version="$version"
 # These are the default variables for the setup.sh script to use.
-# you can change these to suit you needs and enviroment.
+# you can change these to suit you needs and environment.
 # all saved question data is in .env file
 #  - for example, 
 #    always_ask, will ask all question every time, with promt of past anser, false skips if answered before
@@ -125,7 +218,7 @@ source $SCRIPT_DIR/xahl_node.vars
 touch $SCRIPT_DIR/.env
 source $SCRIPT_DIR/.env
 
-# check and update old .vars file if it already exsists
+# check and update old .vars file if it already exists
 if [ -z "$ALWAYS_ASK" ]; then
     ALWAYS_ASK="true"
     sudo sh -c "echo 'ALWAYS_ASK="true"' >> $SCRIPT_DIR/xahl_node.vars"
@@ -153,7 +246,7 @@ if [ -z "$vars_version" ] || [ "$vars_version" == "0.8.7" ] || [ "$vars_version"
     sudo sed -i "s/^NGX_MAINNET_WSS=.*/NGX_MAINNET_WSS=\"6009\"/" $SCRIPT_DIR/xahl_node.vars
     sudo sed -i "s/^NGX_TESTNET_WSS=.*/NGX_TESTNET_WSS=\"6009\"/" $SCRIPT_DIR/xahl_node.vars
     sudo sed -i "s/^NGX_TESTNET_RPC=.*/NGX_TESTNET_RPC=\"5009\"/" $SCRIPT_DIR/xahl_node.vars
-    sed -i '/^SYS_PACKAGES/d' $SCRIPT_DIR/xahl_node.vars
+    sudo sed -i '/^SYS_PACKAGES/d' $SCRIPT_DIR/xahl_node.vars
     sudo sed -i '/^# ubuntu packages that the main script depends on;/a\SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-requests python3-toml whois htop sysstat mlocate apache2-utils)' $SCRIPT_DIR/xahl_node.vars
     echo -e "${GREEN}## ${YELLOW}xahl-node.vars file updated to version 0.89... ${NC}"
 fi
@@ -169,10 +262,11 @@ if echo "$vars_version" | awk '{ exit !($1 < 0.93) }'; then
 fi
 source $SCRIPT_DIR/xahl_node.vars
 source $SCRIPT_DIR/.env
-
-#setup date
-FDATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 }
+
+
+
+######## start of Functions
 
 FUNC_PKG_CHECK(){
     echo
@@ -183,23 +277,22 @@ FUNC_PKG_CHECK(){
 
     # update and upgrade the system
     if [ -z "$INSTALL_UPDATES" ]; then
-        read -p "do you want to check, and install OS updates? Enter true or false # " INSTALL_UPDATES
+        read -p "do you want to check, and install OS updates and dependencies? Enter true or false # " INSTALL_UPDATES
         sed -i "s/^INSTALL_UPDATES=.*/INSTALL_UPDATES=\"$INSTALL_UPDATES\"/" $SCRIPT_DIR/xahl_node.vars
     fi
     if [ "$INSTALL_UPDATES" == "true" ]; then
-        sudo apt update -y && sudo apt upgrade -y
+        sudo apt-get update -y && sudo apt upgrade -y
 
         echo -e "${GREEN}## cycle through packages in vars file, and install... ${NC}"
         echo     
-        # cycle through packages in vars file, and install
         for i in "${SYS_PACKAGES[@]}"
         do
             hash $i &> /dev/null
             if [ $? -eq 1 ]; then
                 echo >&2 "package "$i" not found. installing...."
-                sudo apt install -y "$i"
+                sudo apt-get install -y "$i"
             else
-                echo "packages "$i" exist, proceeding to next...."
+                echo "package "$i" exist, proceeding to next...."
             fi
         done
         echo -e "${GREEN}## ALL PACKAGES INSTALLED.${NC}"
@@ -234,49 +327,41 @@ FUNC_IPV6_CHECK(){
 }
 
 FUNC_SETUP_MODE(){
-    if [ "$VARVAL_CHAIN_NAME" != "mainnet" ] && [ "$VARVAL_CHAIN_NAME" != "testnet" ] && [ "$VARVAL_CHAIN_NAME" != "logrotate" ]; then
-        echo -e "${BLUE}VARVAL_CHAIN_NAME not set in $SCRIPT_DIR/xahl_node.vars"
+    if [ "$NODE_CHAIN_NAME" != "mainnet" ] && [ "$NODE_CHAIN_NAME" != "testnet" ]; then
+        echo -e "${BLUE}NODE_CHAIN_NAME not set in $SCRIPT_DIR/xahl_node.vars"
         echo "Please choose an option:"
         echo "1. Mainnet = configures and deploys/updates xahau node for Mainnet"
         echo "2. Testnet = configures and deploys/updates xahau node for Testnet"
-        echo "3. Logrotate = implements the logrotate config for chain log file ${NC}"
         read -p "Enter your choice [1-3] # " choice
         
         case $choice in
             1) 
-                VARVAL_CHAIN_NAME="mainnet"
+                NODE_CHAIN_NAME="mainnet"
                 ;;
             2) 
-                VARVAL_CHAIN_NAME="testnet"
-                ;;
-            3) 
-                VARVAL_CHAIN_NAME="logrotate"
+                NODE_CHAIN_NAME="testnet"
                 ;;
             *) 
                 echo "Invalid option. Exiting."
                 FUNC_EXIT
                 ;;
         esac
-        sed -i "s/^VARVAL_CHAIN_NAME=.*/VARVAL_CHAIN_NAME=\"$VARVAL_CHAIN_NAME\"/" $SCRIPT_DIR/xahl_node.vars
+        sed -i "s/^NODE_CHAIN_NAME=.*/NODE_CHAIN_NAME=\"$NODE_CHAIN_NAME\"/" $SCRIPT_DIR/xahl_node.vars
     fi
 
-    if [ "$VARVAL_CHAIN_NAME" == "mainnet" ]; then
-        echo -e "${GREEN}### Configuring node for ${BYELLOW}Xahau $VARVAL_CHAIN_NAME${GREEN}... ${NC}"
+    if [ "$NODE_CHAIN_NAME" == "mainnet" ]; then
+        echo -e "${GREEN}### Configuring node for ${BYELLOW}Xahau $NODE_CHAIN_NAME${GREEN}... ${NC}"
         VARVAL_CHAIN_RPC=$NGX_MAINNET_RPC
         VARVAL_CHAIN_WSS=$NGX_MAINNET_WSS
         VARVAL_CHAIN_REPO="mainnet-docker"
         VARVAL_CHAIN_PEER=$XAHL_MAINNET_PEER
 
-    elif [ "$VARVAL_CHAIN_NAME" == "testnet" ]; then
-        echo -e "${GREEN}### Configuring node for ${BYELLOW}Xahau $VARVAL_CHAIN_NAME${GREEN}... ${NC}"
+    elif [ "$NODE_CHAIN_NAME" == "testnet" ]; then
+        echo -e "${GREEN}### Configuring node for ${BYELLOW}Xahau $NODE_CHAIN_NAME${GREEN}... ${NC}"
         VARVAL_CHAIN_RPC=$NGX_TESTNET_RPC
         VARVAL_CHAIN_WSS=$NGX_TESTNET_WSS
         VARVAL_CHAIN_REPO="Xahau-Testnet-Docker"
         VARVAL_CHAIN_PEER=$XAHL_TESTNET_PEER
-
-    elif [ "$VARVAL_CHAIN_NAME" == "logrotate" ]; then
-        FUNC_LOGROTATE
-        FUNC_EXIT
     fi
 
     VARVAL_NODE_NAME="xahl_node_$(hostname -s)"
@@ -294,71 +379,243 @@ FUNC_CLONE_NODE_SETUP(){
     echo
     echo -e "${GREEN}## ${YELLOW}Starting Xahau Node install... ${NC}"
     echo
-    
+
+    if [ "$XAHAU_NODE_TYPE" != "node" ] && [ "$XAHAU_NODE_TYPE" != "history" ] && [ "$XAHAU_NODE_TYPE" != "validator" ] && [ "$XAHAU_NODE_TYPE" != "validatorHistory" ] || [ "$ALWAYS_ASK" == "true" ]; then
+        echo -e "${BLUE}Please choose node type:"
+        echo -e "1. \"Submission Node\", this will use RAM (and not the hard drive), suitable for 8+GB RAM (depends on connection count), 16+ HDD"
+        echo -e "2. \"History Node\", this will use the Hard drive, to keep a history of ledger, suitable for 16GB+ RAM, MUST be a Solid State Drive (space required depends on next question)"
+        echo -e "3. \"Validator\", this will setup a validator, suitable for 16+GB RAM, 64GB+ SSD+ ${NC}"
+        read -p "Enter your choice [1-3] # " choice
+        
+        case $choice in
+            1) 
+                XAHAU_NODE_TYPE="node"
+                ;;
+            2) 
+                XAHAU_NODE_TYPE="nodeHistory"
+                ;;
+            3) 
+                echo "Please choose validator type:"
+                echo "1. /"RAM/" type, where no history is stored."
+                echo "2. /"history/" type, where it uses the hard drive to store ledgers (space required depends on next question)"
+                read -p "Enter your choice [1-2] # " type
+                case $type in
+                    1) 
+                        XAHAU_NODE_TYPE="validator"
+                        ;;
+                    2) 
+                        XAHAU_NODE_TYPE="validatorHistory"
+                        ;;
+                    *) 
+                        echo "Invalid option. Exiting."
+                        FUNC_EXIT
+                        ;;
+                esac
+                ;;
+            *) 
+                echo "Invalid option. Exiting."
+                FUNC_EXIT
+                ;;
+        esac
+        if sudo grep -q 'XAHAU_NODE_TYPE=' "$SCRIPT_DIR/.env"; then
+            sudo sed -i "s/^XAHAU_NODE_TYPE=.*/XAHAU_NODE_TYPE=\"$XAHAU_NODE_TYPE\"/" "$SCRIPT_DIR/.env"
+        else
+            sudo echo -e "XAHAU_NODE_TYPE=\"$XAHAU_NODE_TYPE\"" >> $SCRIPT_DIR/.env
+
+        fi
+    fi
+
+    if  [ "$XAHAU_NODE_TYPE" == "nodeHistory" ] || [ "$XAHAU_NODE_TYPE" == "validatorHistory" ] || [ "$ALWAYS_ASK" == "true" ]; then
+        echo "Please choose the amount of history you want to save:"
+        echo "1. restricted = this will setup a restriction on hard drive use, so by default the limit will be a days worth of ledgers, which needs roughly 40 GB of space"
+        echo "2. full = configure the settings so that there will be NO restriction of size, making it a full history node, be warned this can take up terabytes of hard drive space"
+        read -p "Enter your choice [1-2] # " choice
+        
+        case $choice in
+            1) 
+                NODE_SIZE="restricted"
+                ;;
+            2) 
+                NODE_SIZE="full"
+                ;;
+            *) 
+                echo "Invalid option. Exiting."
+                FUNC_EXIT
+                ;;
+        esac
+        sed -i "s/^NODE_SIZE=.*/NODE_SIZE=\"$NODE_SIZE\"/" $SCRIPT_DIR/xahl_node.vars
+    fi
+
+    if [ "$XAHAU_NODE_TYPE" == "validator" ] || [ "$XAHAU_NODE_TYPE" == "validatorHistory" ]; then
+        if [[ -f "/opt/xahaud/etc/xahaud.cfg" ]] then
+            NODE_VALIDATOR_TOKEN=$(sed -n '/^\[validator_token\]/,/^$/ {/^$/q; /^\[validator_token\]/!{/^$/!p}}' /opt/xahaud/etc/xahaud.cfg)
+        fi
+        if [ -n "$NODE_VALIDATOR_TOKEN" ] && echo "$NODE_VALIDATOR_TOKEN" | grep -q '[^[:space:]]'; then
+            echo "found validator_token, $NODE_VALIDATOR_TOKEN"
+        else
+            printf "${BLUE}The [validator_token] section is empty, enter token here, or leave blank to generate one.${NC} # "
+            read -e -i "$NODE_VALIDATOR_TOKEN" NODE_VALIDATOR_TOKEN
+            if [[ -z "$NODE_VALIDATOR_TOKEN" ]]; then
+                if ! [[ -f "/opt/xahaud/bin/validator-keys" ]]; then
+                    sudo wget -O /opt/xahaud/bin/validator-keys https://raw.githubusercontent.com/Xahau/mainnet-docker/main/utilities/validator-keys
+                    sudo chmod +x /opt/xahaud/bin/validator-keys
+                fi
+                if ! [[ -f  "~/.ripple/validator-keys.json" ]]; then
+                    /opt/xahaud/bin/validator-keys create_keys >/dev/null
+                fi
+                NODE_VALIDATOR_TOKEN=$(/opt/xahaud/bin/validator-keys create_token --keyfile ~/.ripple/validator-keys.json | sed -n '/^\[validator_token\]/,/^$/ {/^$/q; /^\[validator_token\]/!{/^$/!p}}')
+            fi
+            if sudo grep -q 'NODE_VALIDATOR_TOKEN=' "$SCRIPT_DIR/.env"; then
+                sudo sed -i "s/^NODE_VALIDATOR_TOKEN=.*/NODE_VALIDATOR_TOKEN=\"$NODE_VALIDATOR_TOKEN\"/" "$SCRIPT_DIR/.env"
+            else
+                sudo echo -e "NODE_VALIDATOR_TOKEN=\"$NODE_VALIDATOR_TOKEN\"" >> $SCRIPT_DIR/.env
+            fi
+        fi
+    fi
+
     cd $SCRIPT_DIR
     if [ ! -d "$VARVAL_CHAIN_REPO" ]; then
-        echo -e "Creating directory '$SCRIPT_DIR/$VARVAL_CHAIN_REPO' to use for xahaud instalilation..."
+        echo -e "Creating directory '$SCRIPT_DIR/$VARVAL_CHAIN_REPO' to use for xahaud installation..."
         echo -e "Cloning repo https://github.com/Xahau/$VARVAL_CHAIN_REPO' ${NC}"
         git clone https://github.com/Xahau/$VARVAL_CHAIN_REPO
     else
-        echo "exsiting directory '$SCRIPT_DIR/$VARVAL_CHAIN_REPO' found, pulling updates..."
+        echo "existing directory '$SCRIPT_DIR/$VARVAL_CHAIN_REPO' found, pulling updates..."
         cd $SCRIPT_DIR/$VARVAL_CHAIN_REPO
         git pull
     fi
     if [ -d "/opt/xahaud/" ]; then
         echo "previous xahaud node install found,"
-        echo "will stop existing xahaud, check for updates, and re-create xahaud.cfg file..."
+        echo "will stop existing xahaud, check for updates..."
         sudo systemctl stop xahaud
     fi
 
-    rm -f /opt/xahaud/etc/xahaud.cfg 
     cd $SCRIPT_DIR/$VARVAL_CHAIN_REPO
     sudo ./xahaud-install-update.sh
-
-    if [ "$VARVAL_CHAIN_NAME" == "mainnet" ]; then
+    rm -f /opt/xahaud/etc/xahaud.cfg
+    
+    if [[ "$XAHAU_NODE_TYPE" == "nodeHistory" || "$XAHAU_NODE_TYPE" == "validatorHistory" ]]; then 
         echo
-        echo -e "Updating .cfg file to limit public RPC/WS to localhost ...${NC}"
+        echo -e "setting up HDD node...${NC}"
+        echo
+        if [ "$NODE_SIZE" == "full" ]; then
+            XAHAU_LEDGER_HISTORY="full"
+            XAHAU_ONLINE_DELETE=""
+        fi
+        NODE_DB_TYPE="NuDB"
+        NODE_DB_PATH="path=/opt/xahaud/db/nudb"
+        NODE_DB_RELATIONAL="backend=sqlite"
 
-        sudo sed -i -E '/^\[port_ws_public\]$/,/^\[/ {/^(ip = )0\.0\.0\.0/s/^(ip = )0\.0\.0\.0/\1127.0.0.1/}' /opt/xahaud/etc/xahaud.cfg    
-        if grep -qE "^\[port_ws_public\]$" "/opt/xahaud/etc/xahaud.cfg" && grep -q "ip = 0.0.0.0" "/opt/xahaud/etc/xahaud.cfg"; then
-            sudo sed -i -E '/^\[port_ws_public\]$/,/^\[/ s/^(ip = )0\.0\.0\.0/\1127.0.0.1/' /opt/xahaud/etc/xahaud.cfg
-            sleep 2
-            if grep -q "ip = 127.0.0.1" "/opt/xahaud/etc/xahaud.cfg"; then
-                echo -e "It appears that [port_ws_public] was able to update correctly. ${NC}"
-            else
-                echo -e "${RED}Something wrong with updating [port_ws_public] ip in /opt/xahaud/etc/xahaud.cfg. Attempting second time..."
-                sudo sed -i -E '/^\[port_ws_public\]$/,/^\[/ s/^(ip = )0\.0\.0\.0/\1127.0.0.1/' /opt/xahaud/etc/xahaud.cfg
-                sleep 2
-                if grep -q "ip = 127.0.0.1" "/opt/xahaud/etc/xahaud.cfg"; then
-                    echo -e "It appears that [port_ws_public] was able to update correctly on the second attempt. ${NC}"
-                else
-                    echo -e "${RED}Something wrong with updating [port_ws_public] ip in /opt/xahaud/etc/xahaud.cfg. YOU MUST DO MANUALLY! ${NC}"
-                fi
-            fi
-        else
-            echo -e "${RED}Something wrong with updating [port_ws_public] ip in /opt/xahaud/etc/xahaud.cfg. YOU MUST DO MANUALLY! ${NC}"
-        fi
-        
-        sudo sed -i -E '/^\[port_rpc_public\]$/,/^\[/ {/^(ip = )0\.0\.0\.0/s/^(ip = )0\.0\.0\.0/\1127.0.0.1/}' /opt/xahaud/etc/xahaud.cfg    
-        if grep -qE "^\[port_rpc_public\]$" "/opt/xahaud/etc/xahaud.cfg" && grep -q "ip = 0.0.0.0" "/opt/xahaud/etc/xahaud.cfg"; then
-            sudo sed -i -E '/^\[port_rpc_public\]$/,/^\[/ s/^(ip = )0\.0\.0\.0/\1127.0.0.1/' /opt/xahaud/etc/xahaud.cfg
-            if grep -q "ip = 127.0.0.1" "/opt/xahaud/etc/xahaud.cfg"; then
-                echo -e "It appears that [port_rpc_public] was able to update correctly. ${NC}"
-            else
-                echo -e "${RED}Something wrong with updating [port_rpc_public] ip in /opt/xahaud/etc/xahaud.cfg. Attempting second time... ${NC}"
-                sudo sed -i -E '/^\[port_rpc_public\]$/,/^\[/ s/^(ip = )0\.0\.0\.0/\1127.0.0.1/' /opt/xahaud/etc/xahaud.cfg
-                if grep -q "ip = 127.0.0.1" "/opt/xahaud/etc/xahaud.cfg"; then
-                    echo -e "It appears that [port_rpc_public] was able to update correctly on the second attempt. ${NC}"
-                else
-                    echo -e "${RED}Something wrong with updating [port_rpc_public] ip in /opt/xahaud/etc/xahaud.cfg. YOU MUST DO MANUALLY! ${NC}"
-                fi
-            fi
-        else
-            echo -e "${RED}Something wrong with updating [port_rpc_public] ip in /opt/xahaud/etc/xahaud.cfg. YOU MUST DO MANUALLY! ${NC}"
-        fi
     else
         echo
-        echo -e "no .cfg changes needed, as using testnet ...${NC}"
+        echo -e "setting up RAM type node...${NC}"
+        echo
+
+        XAHAU_LEDGER_HISTORY="256"
+        XAHAU_ONLINE_DELETE="256"
+        NODE_DB_TYPE="rwdb"
+        NODE_DB_PATH=""
+        NODE_DB_RELATIONAL="backend=rwdb"
+    fi
+
+sudo cat <<EOF > /opt/xahaud/etc/xahaud.cfg
+[peers_max]
+20
+
+[overlay]
+ip_limit = 1024
+
+[network_id]
+21337
+
+[server]
+port_peer
+port_rpc_admin_local
+port_ws_admin_local
+port_rpc_public
+port_ws_public
+
+[port_peer]
+port = 21337
+ip = 0.0.0.0
+protocol = peer
+
+[port_rpc_admin_local]
+port = 5009
+ip = 127.0.0.1
+admin = 127.0.0.1
+protocol = http
+
+[port_ws_admin_local]
+port = 6009
+ip = 127.0.0.1
+admin = 127.0.0.1
+protocol = ws
+
+[port_rpc_public]
+port = 6007
+ip = 127.0.0.1
+protocol = http
+secure_gateway = 127.0.0.1
+
+[port_ws_public]
+port = 6008
+ip = 127.0.0.1
+protocol = ws
+secure_gateway = 127.0.0.1
+limit = 50000
+send_queue_limit = 20000
+websocket_ping_frequency = 10
+
+[node_size]
+huge
+
+[node_db]
+advisory_delete=0
+online_delete=$XAHAU_ONLINE_DELETE
+type=$NODE_DB_TYPE
+$NODE_DB_PATH
+
+[ledger_history]
+$XAHAU_LEDGER_HISTORY
+
+[database_path]
+/opt/xahaud/db
+
+[debug_logfile]
+/opt/xahaud/log/debug.log
+
+[sntp_servers]
+time.windows.com
+time.apple.com
+time.nist.gov
+pool.ntp.org
+
+[validators_file]
+/opt/xahaud/etc/validators-xahau.txt
+
+[rpc_startup]
+{ "command": "log_level", "severity": "warn" }
+
+[ssl_verify]
+0
+
+[peer_private]
+0
+
+[ips_fixed]
+bacab.alloy.ee 21337
+
+# For validators only
+# Add validator token stanza etc after this. Don't forget to restart
+[voting]
+account_reserve = 1000000
+owner_reserve = 200000
+
+EOF
+
+    if [ "$XAHAU_NODE_TYPE" == "validator" ] || [ "$XAHAU_NODE_TYPE" == "validatorHistory" ]; then
+        echo "[validator_token]" >> /opt/xahaud/etc/xahaud.cfg
+        echo "$NODE_VALIDATOR_TOKEN" >> /opt/xahaud/etc/xahaud.cfg
     fi
 
     if [  "$IPv6" == "true" ]; then
@@ -366,65 +623,6 @@ FUNC_CLONE_NODE_SETUP(){
         sudo sed -i "s/0.0.0.0/::/g" /opt/xahaud/etc/xahaud.cfg
         sudo sed -i "s/127.0.0.1/::1/g" /opt/xahaud/etc/xahaud.cfg
     fi
-    
-    echo
-    echo -e "Updating node size in .cfg file  ...${NC}"
-    echo
-    if [ "$XAHAU_NODE_SIZE" != "tiny" ] && [ "$XAHAU_NODE_SIZE" != "small" ] && [ "$XAHAU_NODE_SIZE" != "medium" ] && [ "$XAHAU_NODE_SIZE" != "huge" ] || [ "$ALWAYS_ASK" == "true" ]; then
-        echo -e "${BLUE}Please choose a config option:"
-        echo -e "1. sets config as \"medium\", ledgers capped at $TINY_LEDGER_HISTORY, suitable for around 6GB+ RAM, and 25GB+ HDD+ (supports some evernodes, with NO rep contracts)"
-        echo -e "2. sets config as \"huge\", ledgers capped at $MEDIUM_LEDGER_HISTORY, suitable for 16GB+ RAM, 50GBB+ SSD+ (supports many evernodes WITH contracts)"
-        echo -e "3. sets config as \"huge\", with NO cap on ledger size, suitable for 32G+ RAM, 30TB+ SSD+ (supports many evernodes WITH contracts, and history API/tools${NC}"
-        read -p "Enter your choice [1-3] # " choice
-        
-        case $choice in
-            1) 
-                XAHAU_NODE_SIZE="tiny"
-                ;;
-            2) 
-                XAHAU_NODE_SIZE="medium"
-                ;;
-            3) 
-                XAHAU_NODE_SIZE="huge"
-                ;;
-            *) 
-                echo "Invalid option. Exiting."
-                FUNC_EXIT
-                ;;
-        esac
-        if sudo grep -q 'XAHAU_NODE_SIZE=' "$SCRIPT_DIR/.env"; then
-            sudo sed -i "s/^XAHAU_NODE_SIZE=.*/XAHAU_NODE_SIZE=\"$XAHAU_NODE_SIZE\"/" "$SCRIPT_DIR/.env"
-        else
-            sudo echo -e "XAHAU_NODE_SIZE=\"$XAHAU_NODE_SIZE\"" >> $SCRIPT_DIR/.env
-
-        fi
-    fi
-    
-    if [ "$XAHAU_NODE_SIZE" == "tiny" ] || [ "$XAHAU_NODE_SIZE" == "small" ] ; then
-        XAHAU_LEDGER_HISTORY=$TINY_LEDGER_HISTORY
-        XAHAU_ONLINE_DELETE=$TINY_LEDGER_DELETE
-        sudo sed -i "/^\[node_size\]/!b;n;cmedium" /opt/xahaud/etc/xahaud.cfg
-        echo -e "config set to ${BYELLOW}medium${NC} also set ledger_history=${BYELLOW}$XAHAU_LEDGER_HISTORY${NC} and online_delete=${BYELLOW}$XAHAU_ONLINE_DELETE${NC}"
-    fi
-    if [ "$XAHAU_NODE_SIZE" == "medium" ]; then
-        XAHAU_LEDGER_HISTORY=$MEDIUM_LEDGER_HISTORY
-        XAHAU_ONLINE_DELETE=$MEDIUM_LEDGER_DELETE
-        sudo sed -i "/^\[node_size\]/!b;n;chuge" /opt/xahaud/etc/xahaud.cfg
-        echo -e "config set to ${BYELLOW}huge${NC} also set ledger_history=${BYELLOW}$XAHAU_LEDGER_HISTORY${NC} and online_delete=${BYELLOW}$XAHAU_ONLINE_DELETE${NC}"
-    fi
-    if [ "$XAHAU_NODE_SIZE" == "huge" ]; then
-        XAHAU_LEDGER_HISTORY="full"
-        XAHAU_ONLINE_DELETE=""
-        sudo sed -i "/^\[node_size\]/!b;n;chuge" /opt/xahaud/etc/xahaud.cfg
-        echo -e "config set to ${BYELLOW}huge${NC} also set ledger_history to ${BYELLOW}full${NC} and cleared online_delete setting${NC}"
-    fi
-    echo ".."
-    sudo sed -i -e 's/^#\{0,1\}\(\[ledger_history\]\)/\1/; /^\[ledger_history\]/ { n; s/.*/'"$XAHAU_LEDGER_HISTORY"'/; }' /opt/xahaud/etc/xahaud.cfg   
-    echo "..."
-    sudo grep -q 'online_delete' /opt/xahaud/etc/xahaud.cfg || sed -i '/^online_delete.*/!{ /\[node_db\]/ s/$/\nonline_delete='"$XAHAU_ONLINE_DELETE"'/ }' /opt/xahaud/etc/xahaud.cfg
-    echo "...."
-    sudo sed -i "s/online_delete=.*/online_delete=$XAHAU_ONLINE_DELETE/" /opt/xahaud/etc/xahaud.cfg
-    echo "....."
 
     echo "restarting xahaud service"
     sudo systemctl restart xahaud.service
@@ -435,6 +633,119 @@ FUNC_CLONE_NODE_SETUP(){
     cd $SCRIPT_DIR
     sleep 4s
 }
+
+FUNC_XAHAUD_UPDATER(){
+    # echo
+    # echo -e "${GREEN}#########################################################################${NC}"
+    # echo 
+    # echo -e "${GREEN}## ${YELLOW}Setup: Install Xahaud Updater... ${NC}"
+    # echo
+    msg_info "checking and adding Auto Updater..."
+
+    if [[ "$AUTOUPDATE_XAHAUD" == "true" ]]; then
+
+        # Ensure the log directory exists
+        mkdir -p "$LOG_DIR"
+
+        # Copy the provided update script to /usr/local/bin
+        cat << 'EOF' > "$UPDATE_SCRIPT_PATH"
+#!/bin/bash
+# Copy this file to /usr/local/bin as root
+# make it executable - chmod +x /usr/local/bin/root
+# add the cron file
+
+VERSION="latest"
+SCREEN_OUTPUT=false
+
+# Parse command-line options
+while getopts "v:s" opt; do
+case $opt in
+    v) VERSION=$OPTARG ;;
+    s) SCREEN_OUTPUT=true ;;
+esac
+done
+
+RELEASE_TYPE="release"
+URL="https://build.xahau.tech/"
+BASE_DIR=/opt/xahaud
+USER=xahaud
+PROGRAM=xahaud
+BIN_DIR=$BASE_DIR/bin
+DL_DIR=$BASE_DIR/downloads
+LOG_DIR=$BASE_DIR/log
+SCRIPT_LOG_FILE=$LOG_DIR/update.log
+SERVICE_NAME="$PROGRAM.service"
+
+log() {
+local message="$1"
+echo "$(date +"%Y-%m-%d %H:%M:%S") $message" >> "$SCRIPT_LOG_FILE"
+if [ "$SCREEN_OUTPUT" = true ]; then
+    echo "$message"
+fi
+}
+
+# Ensure the script runs as root
+[[ $EUID -ne 0 ]] && exit 1
+
+# Fetch available versions
+filenames=$(curl --silent "${URL}" | grep -Eo '>[^<]+<' | sed -e 's/^>//' -e 's/<$//' | grep -E '^\S+\+[0-9]{2,3}$' | grep -E "$RELEASE_TYPE")
+
+if [[ "$VERSION" == "latest" ]]; then
+version_filter="release"
+else
+version_filter=$VERSION
+fi
+
+# Sort using version comparison and fetch the latest one
+version_file=$(echo "$filenames" | grep "$version_filter" | sort -V | tail -n 1)
+
+if [[ -z "$version_file" ]]; then
+log "No update found."
+exit 0
+fi
+
+log "New Update: $version_file"
+
+if [[ ! -f "$DL_DIR/$version_file" ]]; then
+curl --silent --fail "${URL}${version_file}" -o "$DL_DIR/$version_file"
+chmod +x "$DL_DIR/$version_file"
+chown $USER:$USER "$DL_DIR/$version_file"
+log "Downloaded $version_file"
+fi
+
+current_file=$(readlink "$BIN_DIR/$PROGRAM")
+if [[ "$current_file" != "$DL_DIR/$version_file" ]]; then
+ln -snf "$DL_DIR/$version_file" "$BIN_DIR/$PROGRAM"
+log "Symlink updated to $version_file"
+
+# Restart the service using systemctl
+log "Restarting $SERVICE_NAME"
+systemctl restart $SERVICE_NAME
+
+log "Update available: Yes"
+else
+log "Update available: No"
+fi
+EOF
+        # Make the update script executable
+        chmod +x "$UPDATE_SCRIPT_PATH"
+
+        cron_job="0 */${AUTOUPDATE_CHECK_INTERVAL} * * * root sleep \$((RANDOM*3540/32768)) && \$UPDATE_SCRIPT_PATH >> \$LOG_FILE 2>&1"
+        existing_crontab=$(crontab -l 2>/dev/null) || existing_crontab=""
+        if echo "$existing_crontab" | grep -q "* * * root sleep \$((RANDOM*3540/32768))"; then
+            existing_crontab=$(echo "$existing_crontab" | sed '/\* \* \* root sleep \$((RANDOM\*3540\/32768))/d')
+            existing_crontab="${existing_crontab}"$'\n'"${cron_job}"
+            echo "$existing_crontab" | crontab -
+            msg_ok "updated cron tab tasks, system will now check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours"
+        else
+            (sudo crontab -l; echo "$cron_job") | sudo crontab -
+            msg_ok "added new entry to cron tab tasks, system will now check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours"
+        fi
+    else
+        msg_error "NOT adding AutoUpdate functions, due to AUTOUPDATE_XAHAUD set to ${AUTOUPDATE_XAHAUD} in xahl_node.vars file"
+    fi
+}
+
 
 FUNC_UFW_SETUP(){
     # Check UFW config, install/update 
@@ -463,7 +774,7 @@ FUNC_UFW_SETUP(){
             echo
             echo -e "${GREEN}## ${YELLOW}Setup: Installing UFW... ${NC}"
             echo
-            sudo apt install ufw
+            sudo apt-get install ufw
             FUNC_SETUP_UFW_PORTS;
             FUNC_ENABLE_UFW;
         fi
@@ -536,7 +847,7 @@ FUNC_CERTBOT_PRECHECK(){
     echo
 
     # Install Let's Encrypt Certbot
-    sudo apt install certbot python3-certbot-nginx -y
+    sudo apt-get install certbot python3-certbot-nginx -y
     echo -e "${GREEN}#########################################################################${NC}"
     echo
     sleep 2s
@@ -1457,7 +1768,7 @@ EOF
     if sudo crontab -l | grep -Fxq "$cron_job"; then
         echo -e "${GREEN}## ${YELLOW}Setup: Cron job for .toml updater already exists. No changes made. ${NC}"
     else
-        echo "$cron_job" | sudo crontab -
+        (sudo crontab -l; echo "$cron_job") | sudo crontab -
         echo -e "${GREEN}## ${YELLOW}Setup: Cron job for .toml updater added successfully."
     fi
 
@@ -1511,8 +1822,7 @@ domain = "https://$USER_DOMAIN"
 install = "created by g140point6 & gadget78 Node Script"
 
 [[STATUS]]
-NETWORK = "$VARVAL_CHAIN_NAME"
-NODESIZE = "$XAHAU_NODE_SIZE"
+NETWORK = "$NODE_CHAIN_NAME"
 
 [[AMENDMENTS]]
 
@@ -1548,7 +1858,7 @@ FUNC_ALLOWLIST_CHECK(){
         NODE_IP="127.0.0.1"
     fi
     #dockers IP
-    #DCKR_HOST_IP=$(sudo docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $VARVAL_CHAIN_NAME_xinfinnetwork_1)
+    #DCKR_HOST_IP=$(sudo docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $NODE_CHAIN_NAME_xinfinnetwork_1)
     LOCAL_IP=$(hostname -I | awk '{print $1}')
     if [ -z "$LOCAL_IP" ]; then
         LOCAL_IP="127.0.0.1"
@@ -1616,8 +1926,8 @@ FUNC_NGINX_CLEAR_RECREATE() {
     nginx -v 
     if [ $? != 0 ]; then
         echo -e "${GREEN}## ${YELLOW}NGINX is not installed. Installing now...${NC}"
-        apt update -y
-        sudo apt install nginx -y
+        apt-get update -y
+        sudo apt-get install nginx -y
     else
         # If NGINX is already installed.. skipping
         echo -e "${GREEN}## NGINX is already installed... ${NC}"
@@ -1655,7 +1965,7 @@ set_real_ip_from $NGINX_PROXY_IP;
 real_ip_header X-Real-IP;
 real_ip_recursive on;
 server {
-    server_name $USER_DOMAIN;
+    server_name _;
 
     # Additional settings, including HSTS
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
@@ -1897,18 +2207,18 @@ FUNC_LOGROTATE(){
     sleep 2s
 
     # Prompt for Chain if not provided as a variable
-    if [ -z "$VARVAL_CHAIN_NAME" ]; then
+    if [ -z "$NODE_CHAIN_NAME" ]; then
 
         while true; do
          read -p "Enter which chain your node is deployed on (e.g. mainnet or testnet): " _input
 
             case $_input in
                 testnet )
-                    VARVAL_CHAIN_NAME="testnet"
+                    NODE_CHAIN_NAME="testnet"
                     break
                     ;;
                 mainnet )
-                    VARVAL_CHAIN_NAME="mainnet"
+                    NODE_CHAIN_NAME="mainnet"
                     break
                     ;;
                 * ) echo "Please answer a valid option.";;
@@ -1949,12 +2259,19 @@ EOF
 
 
 
+
+
+
+
+
+
+
 FUNC_NODE_DEPLOY(){
     echo
     echo -e "${GREEN}#########################################################################${NC}"
     echo -e "${YELLOW}#########################################################################${NC}"
     echo -e "${GREEN}${NC}"
-    echo -e "${GREEN}             Xahau ${BYELLOW}$_OPTION${GREEN} RPC/WSS Node - Install${NC}"
+    echo -e "${GREEN}         Xahau ${BYELLOW}$NODE_CHAIN_NAME${GREEN} RPC/WSS Node - Install${NC}"
     echo -e "${GREEN}${NC}"
     echo -e "${YELLOW}#########################################################################${NC}"
     echo -e "${GREEN}#########################################################################${NC}"
@@ -1987,26 +2304,29 @@ FUNC_NODE_DEPLOY(){
     # main Xahau Node setup
     FUNC_CLONE_NODE_SETUP;
 
+    # install xahaud auto updater
+    FUNC_XAHAUD_UPDATER;
+
     # Check/Install Nginx, clear default/old-config
     FUNC_NGINX_CLEAR_RECREATE;
 
-    # Check and install/setup UFW (Uncomplicated Firewall)
+    # Check, install or setup UFW (Uncomplicated Firewall)
     FUNC_UFW_SETUP;
 
-    # install/setup logrotate to Rotate logs on regular basis
+    # check install or setup logrotate, to Rotate logs on regular basis so not to overrun space
     FUNC_LOGROTATE;
 
     # request new SSL certificate via certbot, before checking/re-enabling nginx settings
     FUNC_CERTBOT_REQUEST;
 
-    # setup update command
+    # setup a manual "update" command
     sudo bash -c "echo 'bash -c \"\$(wget -qLO - https://raw.githubusercontent.com/gadget78/xahl-node/main/setup.sh)\"' >/usr/bin/update"
     sudo chmod +x /usr/bin/update
 
     echo
     echo -e "${GREEN}#########################################################################${NC}"
     echo
-    echo -e "${GREEN}## ${YELLOW}Setup: removed old files, and Created and enabled a new Nginx configuration files${NC}"
+    echo -e "${GREEN}## ${YELLOW}Setup: removed old files, create and enabled a new Nginx configuration file${NC}"
     echo
     if  [ -z "$ORIGINAL_USER_ID" ]; then 
       echo -e "${GREEN}## ${YELLOW}Setup: just applying corrective ownership... ${NC}"
@@ -2015,13 +2335,13 @@ FUNC_NODE_DEPLOY(){
     echo
     echo -e "${GREEN}#########################################################################${NC}"
     echo
-    echo -e "${NC}if all went well, your Xahau Node will now be up and running, you can check; ${NC}"
+    echo -e "${NC}if all went well, your Xahau Node will now be up and running; ${NC}"
     echo
-    echo -e "${NC}locally at, websocket ${BYELLOW}ws://$LOCAL_IP${NC} or RPC/API and website at ${BYELLOW}https://$LOCAL_IP ${NC}"
+    echo -e "${NC}you can check locally at in a web browser at ${BYELLOW}http://$LOCAL_IP${NC} or RPC/API and website at ${BYELLOW}https://$LOCAL_IP ${NC}"
     echo
     echo -e "${NC}or externally at, websocket ${BYELLOW}wss://$USER_DOMAIN${NC} or RPC/API and website at ${BYELLOW}https://$USER_DOMAIN ${NC}"
     echo
-    echo -e "use file ${BYELLOW}'$SCRIPT_DIR/$NGINX_ALLOWLIST_FILE'${NC} to add/remove IP addresses that you want to have access to your submission node${NC}"
+    echo -e "use file ${BYELLOW}'$SCRIPT_DIR/$NGINX_ALLOWLIST_FILE'${NC} to add and remove IP addresses that you want to have access to your submission node${NC}"
     echo -e "once file is edited and saved, run command ${BYELLOW}sudo nginx -s reload${NC} to apply new settings ${NC}"
     echo -e "you can also use this to check the settings if the website is not displaying correctly"
     echo

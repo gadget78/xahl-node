@@ -1,5 +1,5 @@
 # Xahau RPC/WSS Submission Node 
-Xahau submission node installation, utlising nginx to give webserver and endpoints, with lets encrypt TLS certificate.
+Xahau submission node installation, utilizing nginx to give webserver and endpoints, with lets encrypt TLS certificate.
 
 ---
 
@@ -19,13 +19,11 @@ and supplements it with the necessary configuration to provide a TLS secured RPC
     - [Config files](#config-files)
     - [Nginx related](#nginx-related)
     - [Permitting Access](#node-ip-permissions)
-    - [Testing your Xahaud server](##testing-your-xahaud-server)
-      - [xahaud](#xahaud)
+    - [Testing your Xahaud server](#testing-your-xahaud-server)
+      - [local xahaud](#local-xahaud)
       - [RPC and API](#rpc-and-api)
       - [Websocket](#websocket)
-       - [locally](#locally)
-       - [remotley](#remotely-safe-to-use-on-your-evernode)
-  - [Future updates](#future-updates)
+    - [Future updates](#future-updates)
     - [Contributors:](#contributors)
     - [Feedback](#feedback)
 
@@ -47,6 +45,7 @@ and supplements it with the necessary configuration to provide a TLS secured RPC
         - 5.public access to .toml file
    - TL;DR; you only need ONE (A record) domain pointing to this server (no need to any CNAME setups)
    - Automatically detects the IPs of your ssh session, the node itself, and its local enviroment then adds them to the nginx_allowlist.conf file
+   - checks for updates every 24 hours
    - also now works behind another nginx/NPM front end see [Nginx related](#nginx-related) section
    - IPv6 support (auto detect by default, can be forced via .vars setting)
    - adds a simple `update` to the command line, so you can update easily
@@ -98,7 +97,7 @@ which you can of course, just make sure that it is an `A Record`, or its pointin
 
 also, this ONE domain you use, will be the SAME domain you will then use in a browser to check your node, https://yourdomain.com, and the domain for the websocket for use in your evernode, wss://yourdomain.com
 
-# OK so HOW do we Install ?
+# OK so HOW do we Install
 
 simpliest method, in a suitable enviroment, like debian or ubuntu, with at leat 2GB of RAM, and 5GB of HDD space
 
@@ -189,7 +188,7 @@ for example
 
 __ADD__ : Simply add a new line with the same syntax as above,
 
-__REMOVE__ : Simply delete the a line.
+__REMOVE__ : Simply delete a line.
 
 THEN
 
@@ -242,10 +241,10 @@ now the command to perform, may be best to copy and paste this, then alter the w
 
 which will reply WebSocket working, or Websocket Failed
 
-#### ONLY SAFE in none Evernode Enviroments
+#### ONLY SAFE in none Evernode Environments
 
 to test the Websocket function of your xahau node, we can use the wscat command, 
-**BUT this is not safe to install on a already exsisting/running evernode. only locally, or non-evernode terminals**
+**BUT this is not safe to install on a already existing/running evernode. only locally, or non-evernode terminals**
 
 Copy the following command replacing `yourdomain.com` with your domain you used in setup. (this can be found in the .env file)
 
@@ -305,6 +304,7 @@ A special thanks & shout out to the following community members for their input 
 - [@nixer89](https://github.com/nixer89) helped with the websocket splitting
 - [@gadget78](https://github.com/gadget78) 
 - [@realgo140point6](https://github.com/go140point6)
+- [@rippleitinnz](https://github.com/rippleitinnz/xahaud_update)for the binary auto updater
 - [@s4njk4n](https://github.com/s4njk4n)
 - [Jan Žorž]{https://github.com/orgs/community/discussions/10539} for the IPv6 git hub proxy support
 - @samsam
