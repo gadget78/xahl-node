@@ -179,7 +179,7 @@ NODE_CHAIN_NAME="mainnet"      # can be either mainnet or testnet (aka VARVAL_CH
 
 # variables for script choices
 ALWAYS_ASK="true"
-SCRIPT_DIR="/~/xahl-node"      # by default this is now /home/, previously was always /root/ and not configurable
+SCRIPT_DIR="~/xahl-node"       # by default this is now /home/, previously was always /root/ and not configurable
 INSTALL_SYS_PACKAGES="true"    # install and update all thats listed in system packages array below (this was called \$INSTALL_UPDATES in previous versions) 
 INSTALL_UFW="true"
 INSTALL_CERTBOT_SSL="true"
@@ -456,9 +456,9 @@ FUNC_CLONE_NODE_SETUP(){
     echo
 
     if [[ "$NODE_TYPE" != "node" ]] && [[ "$NODE_TYPE" != "history" ]] && [[ "$NODE_TYPE" != "validator" ]] && [[ "$NODE_TYPE" != "validatorHistory" ]] || [[ "$ALWAYS_ASK" == "true" ]]; then
-        echo -e "${BLUE}Please choose node type:"
-        echo -e "1. \"Submission Node\", this will setup the Node to use RAM for the database (and not the hard drive), perfect for submissions and slower HDD, suitable for 8+GB RAM (althou will depends on connection count), 16+ HDD"
-        echo -e "2. \"History Node\", this will use the Hard drive for the database storage, so can keep a history of ledgers, suitable for 16GB+ RAM, MUST be a Solid State Drive (space required depends on next question)"
+        echo -e "${BLUE}Please choose node type: (if you are unsure, choose option 1)"
+        echo -e "1. \"Submission Node\", this will setup the Node to use RAM for the database, so no need for a fast Solid State HDD, suitable for 8+GB RAM, 16+GB HDD"
+        echo -e "2. \"History Node\", this will use the Hard drive for the database storage (drive MUST be a Solid State type), so it is able to keep a history of ledgers, suitable for 16GB+ RAM (HDD space required depends on next question)"
         echo -e "3. \"Validator\", this will setup a validator, suitable for 16+GB RAM, 64GB+ SSD+ ${NC}"
         read -p "Enter your choice [1-3] # " choice
         
