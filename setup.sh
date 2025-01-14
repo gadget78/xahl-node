@@ -261,7 +261,7 @@ if [ -z "$vars_version" ] || [ "$vars_version" == "0.8.7" ] || [ "$vars_version"
     sudo sed -i "s/^NGX_TESTNET_WSS=.*/NGX_TESTNET_WSS=\"6009\"/" $SCRIPT_DIR/xahl_node.vars
     sudo sed -i "s/^NGX_TESTNET_RPC=.*/NGX_TESTNET_RPC=\"5009\"/" $SCRIPT_DIR/xahl_node.vars
     sudo sed -i '/^SYS_PACKAGES/d' $SCRIPT_DIR/xahl_node.vars
-    sudo sed -i '/^# ubuntu packages that the main script depends on;/a\SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-requests python3-toml whois htop sysstat mlocate apache2-utils)' $SCRIPT_DIR/xahl_node.vars
+    sudo sed -i '/^# ubuntu packages that the main script depends on;/a\SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-requests python3-toml whois htop sysstat apache2-utils)' $SCRIPT_DIR/xahl_node.vars
     echo -e "${GREEN}## ${YELLOW}xahl-node.vars file updated to version 0.89... ${NC}"
 fi
 
