@@ -2031,7 +2031,7 @@ FUNC_NGINX_CLEAR_RECREATE() {
     echo
     echo -e "${GREEN}## ${YELLOW}Checking and installing NGINX... ${NC}"
     if ! command -v nginx &> /dev/null; then
-        msg_info_ "installing nginx...                                                                                  "
+        msg_info "installing nginx...                                                                                  "
         apt-get update >/dev/null 2>&1
         apt-get install -y nginx 2>&1 | awk '{ printf "\r\033[K   installing nginx.. "; printf "%s", $0; fflush() }'
         msg_ok "nginx installed."
