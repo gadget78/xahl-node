@@ -822,6 +822,7 @@ EOF
         # Make the update script executable
         chmod +x "$UPDATE_SCRIPT_PATH"
 
+        # add to cronjob
         cron_job="0 */${AUTOUPDATE_CHECK_INTERVAL} * * * root sleep \$((RANDOM*3540/32768)) && $UPDATE_SCRIPT_PATH >> $LOG_FILE 2>&1"
         existing_crontab=$(crontab -l 2>/dev/null) || existing_crontab=""
         if echo "$existing_crontab" | grep -q "$UPDATE_SCRIPT_PATH"; then
@@ -830,7 +831,7 @@ EOF
             echo "$existing_crontab" | crontab -
             msg_ok "updated cron tab tasks, system will now check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours"
         else
-            (sudo crontab -l 2>/dev/null; echo "$cron_job") | sudo crontab -
+            (sudo crontab -l 2>&1 | grep -v -E "^no crontab for|^sudo:" || true; echo "$cron_job") | sudo crontab -
             msg_ok "added new entry to cron tab tasks, system will check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours"
         fi
     else
@@ -866,7 +867,9 @@ FUNC_UFW_SETUP(){
             echo
             echo -e "${GREEN}## ${YELLOW}Setup: Installing UFW... ${NC}"
             echo
-            sudo apt-get install ufw
+            msg_info "installing ufw"
+            apt-get install -y ufw 2>&1 | awk '{ printf "\r\033[K   installing ufw.. "; printf "%s", $0; fflush() }'
+            msg_ok "ufw installed"
             FUNC_SETUP_UFW_PORTS;
             FUNC_ENABLE_UFW;
         fi
@@ -939,7 +942,9 @@ FUNC_CERTBOT_PRECHECK(){
     echo
 
     # Install Let's Encrypt Certbot
-    sudo apt-get install certbot python3-certbot-nginx -y
+    msg_info "installing certbot"
+    apt-get install certbot python3-certbot-nginx -y 2>&1 | awk '{ printf "\r\033[K   installing certbot.. "; printf "%s", $0; fflush() }'
+    msg_ok "certbot installed"
     echo -e "${GREEN}#########################################################################${NC}"
     echo
     sleep 2s
@@ -1862,7 +1867,7 @@ EOF
     if sudo crontab -l 2>/dev/null| grep -Fxq "$cron_job"; then
         echo -e "${GREEN}## ${YELLOW}Setup: Cron job for .toml updater already exists. No changes made. ${NC}"
     else
-        (sudo crontab -l 2>/dev/null; echo "$cron_job") | sudo crontab -
+        (sudo crontab -l 2>&1 | grep -v -E "^no crontab for|^sudo:" || true; echo "$cron_job") | sudo crontab -
         echo -e "${GREEN}## ${YELLOW}Setup: Cron job for .toml updater added successfully."
     fi
 
