@@ -887,11 +887,11 @@ FUNC_SETUP_UFW_PORTS(){
 
     # Get current SSH and xahau node port number, and unblock them
     SSH_PORT=$(sudo ss -tlpn | grep sshd | awk '{print$4}' | cut -d ':' -f 2 -s) || SSH_PORT=""
-    if [[ -z "$SSH_PORT" ]]; then
+    if [[ -n "$SSH_PORT" ]]; then
         echo -e "current SSH port number detected as: ${BYELLOW}$SSH_PORT${NC}"
         sudo ufw allow $SSH_PORT/tcp
     else
-        echo -e "current SSH port NOT detected number detected."
+        echo -e "current SSH port NOT detected."
     fi
     echo -e "current Xahau Node port number detected as: ${BYELLOW}$VARVAL_CHAIN_PEER${NC}"
 
