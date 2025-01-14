@@ -1,5 +1,5 @@
 #!/bin/bash
-version=0.95
+version=0.96
 
 ###################################################################################
 # setup message, variables, and functions for script.
@@ -195,7 +195,7 @@ IPv6="auto"
 # *      these are for the script/nginx setups            *
 
 # system packages that the main script depends on;
-SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-pip whois htop sysstat mlocate apache2-utils)
+SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-requests python3-toml whois htop sysstat apache2-utils)
 
 # variables for nginx
 NGX_CONF_ENABLED="/etc/nginx/sites-enabled/"
@@ -264,6 +264,7 @@ if [ -z "$vars_version" ] || [ "$vars_version" == "0.8.7" ] || [ "$vars_version"
     sudo sed -i '/^# ubuntu packages that the main script depends on;/a\SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-requests python3-toml whois htop sysstat mlocate apache2-utils)' $SCRIPT_DIR/xahl_node.vars
     echo -e "${GREEN}## ${YELLOW}xahl-node.vars file updated to version 0.89... ${NC}"
 fi
+
 if echo "$vars_version" | awk '{ exit !($1 < 0.94) }'; then
     echo -e "xahl_node.vars file needs updating, importing old variables...${NC}"
     rm -f $SCRIPT_DIR/xahl_node.vars
@@ -306,7 +307,7 @@ IPv6="auto"
 # *      these are for the script/nginx setups            *
 
 # system packages that the main script depends on;
-SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-pip whois htop sysstat mlocate apache2-utils)
+SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-requests python3-toml whois htop sysstat apache2-utils)
 
 # variables for nginx
 NGX_CONF_ENABLED="/etc/nginx/sites-enabled/"
@@ -334,6 +335,11 @@ UPDATE_SCRIPT_PATH="/usr/local/bin/\$UPDATE_SCRIPT_NAME"
 LOG_DIR="/opt/xahaud/log"
 LOG_FILE="\$LOG_DIR/update.log"
 EOF
+fi
+
+if [ "$vars_version" == "0.95" ]; then
+    vars_version="$version"
+    sudo sed -i '/^# ubuntu packages that the main script depends on;/a\SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-requests python3-toml whois htop sysstat apache2-utils)' $SCRIPT_DIR/xahl_node.vars
 fi
 
 source $SCRIPT_DIR/xahl_node.vars
@@ -366,24 +372,18 @@ FUNC_PKG_CHECK(){
 
         echo -e "${GREEN}## cycle through packages in vars file, and install... ${NC}"
         apt-get update >/dev/null 2>&1
-        for i in "${SYS_PACKAGES[@]}"
+        for a in "${SYS_PACKAGES[@]}"
         do
-            if ! command -v $i &> /dev/null; then
-                msg_info "installing $i...                                                                                  "
-                apt-get install -y $i 2>&1 | awk '{ printf "\r\033[K   installing $i.. "; printf "%s", $0; fflush() }'
-                msg_ok "$i installed."
+            if ! command -v $a &> /dev/null; then
+                msg_info "installing $a...                                                                                  "
+                apt-get install -y "$a" 2>&1 | awk -v app="$a" '{ printf "\r\033[K   installing %s.. ", app; printf "%s", $0; fflush() }'
+                msg_ok "$a installed."
             else
-                msg_ok "$i already installed"
+                msg_ok "$a was already installed."
             fi
         done
         echo
 
-        echo -e "${GREEN}## check python packages, and install... ${NC}"
-        msg_info "checkng python modules..."
-        sudo pip3 install requests toml 2>&1 | awk '{ printf "\r\033[K   checking updates.. "; printf "%s", $0; fflush() }'
-        msg_ok "python modules, toml, requests, all installed"
-        echo
-        echo -e "${GREEN}## ALL PACKAGES INSTALLED.${NC}"
     else
         echo -e "${GREEN}## ${YELLOW}INSTALL_SYS_PACKAGES set to false in var files, skipping... ${NC}"
     fi
@@ -886,10 +886,15 @@ FUNC_SETUP_UFW_PORTS(){
     sudo ufw allow 'Nginx Full'
 
     # Get current SSH and xahau node port number, and unblock them
-    CPORT=$(sudo ss -tlpn | grep sshd | awk '{print$4}' | cut -d ':' -f 2 -s)
-    echo -e "current SSH port number detected as: ${BYELLOW}$CPORT${NC}"
-    echo -e "current Xahau Node port number detected as: ${BYELLOW}$CPORT${NC}"
-    sudo ufw allow $CPORT/tcp
+    SSH_PORT=$(sudo ss -tlpn | grep sshd | awk '{print$4}' | cut -d ':' -f 2 -s) || SSH_PORT=""
+    if [[ -z "$SSH_PORT"]]; then
+        echo -e "current SSH port number detected as: ${BYELLOW}$SSH_PORT${NC}"
+        sudo ufw allow $SSH_PORT/tcp
+    else
+        echo -e "current SSH port NOT detected number detected."
+    fi
+    echo -e "current Xahau Node port number detected as: ${BYELLOW}$VARVAL_CHAIN_PEER${NC}"
+
     sudo ufw allow $VARVAL_CHAIN_PEER/tcp
     sudo ufw status verbose --no-page
     sleep 2s
@@ -938,8 +943,6 @@ FUNC_CERTBOT_PRECHECK(){
         return
     fi
     echo
-    echo -e "${GREEN}## ${YELLOW}CertBot: installing, ready for Setting up... ${NC}"
-    echo
 
     # Install Let's Encrypt Certbot
     msg_info "installing certbot"
@@ -947,7 +950,7 @@ FUNC_CERTBOT_PRECHECK(){
     msg_ok "certbot installed"
     echo -e "${GREEN}#########################################################################${NC}"
     echo
-    sleep 2s
+    sleep 1s
 
 }
 
@@ -970,7 +973,7 @@ FUNC_CERTBOT_REQUEST(){
 
     echo
     echo -e "${GREEN}#########################################################################${NC}"
-    sleep 4s
+    sleep 2s
 
     # Start/Reload Nginx to apply all the new configuration
     if sudo systemctl is-active --quiet nginx; then
