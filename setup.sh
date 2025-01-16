@@ -83,7 +83,7 @@ cleanup() {
     if [[ -n "${SPINNER_PID// }" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then kill $SPINNER_PID > /dev/null && printf "\e[?25h"; fi
     popd >/dev/null
     sudo sh -c 'rm -f /etc/sudoers.d/node_setup'
-    rm -rf $TEMP_DIR
+    sudo rm -rf $TEMP_DIR
     stty sane
 }
 exit-script() {
@@ -141,10 +141,10 @@ elif sudo -l > /dev/null 2>&1; then
         msg_ok "${USER_ID} logged in, root privileges obtained, and timeout extended to $TIMEOUT minutes."
     else
         msg_error "${USER_ID} logged in, but an error occurred setting up sudoers configuration to extend timeout. Aborting."
-        rm -f "${TEMP_DIR}/node_setup"
+        sudo rm -f "${TEMP_DIR}/node_setup"
         exit 1
     fi
-    rm -f "${TEMP_DIR}/node_setup"
+    sudo rm -f "${TEMP_DIR}/node_setup"
 
 else
     msg_error "This script requires root or sudo privileges."
@@ -267,7 +267,7 @@ fi
 
 if echo "$vars_version" | awk '{ exit !($1 < 0.94) }'; then
     echo -e "xahl_node.vars file needs updating, importing old variables...${NC}"
-    rm -f $SCRIPT_DIR/xahl_node.vars
+    sudo rm -f $SCRIPT_DIR/xahl_node.vars
     sudo cat <<EOF > $SCRIPT_DIR/xahl_node.vars
 vars_version="$version"
 # These are the default variables for the setup.sh script to use.
@@ -581,8 +581,8 @@ FUNC_CLONE_NODE_SETUP(){
 
     cd $SCRIPT_DIR/$VARVAL_CHAIN_REPO
     sudo ./xahaud-install-update.sh
-    rm -f /opt/xahaud/etc/xahaud.cfg > /dev/null
-    rm -f -r /opt/xahaud/db > /dev/null
+    sudo rm -f /opt/xahaud/etc/xahaud.cfg > /dev/null
+    sudo rm -f -r /opt/xahaud/db > /dev/null
     
     if [[ "$NODE_TYPE" == "nodeHistory" || "$NODE_TYPE" == "validatorHistory" ]]; then 
         echo
@@ -739,7 +739,7 @@ FUNC_XAHAUD_UPDATER(){
         sudo mkdir -p "$LOG_DIR"
 
         # Copy the provided update script to /usr/local/bin
-        cat << 'EOF' > "$UPDATE_SCRIPT_PATH"
+        sudo cat << 'EOF' > "$UPDATE_SCRIPT_PATH"
 #!/bin/bash
 # Copy this file to /usr/local/bin as root
 # make it executable - chmod +x /usr/local/bin/root
