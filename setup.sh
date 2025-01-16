@@ -136,7 +136,7 @@ elif sudo -l > /dev/null 2>&1; then
 
     # Validate and apply sudoers timeout update
     echo "Defaults:$USER_ID timestamp_timeout=$TIMEOUT" > "${TEMP_DIR}/node_setup"
-    if visudo -cf "${TEMP_DIR}/node_setup"; then
+    if visudo -cf "${TEMP_DIR}/node_setup" >/dev/null 2>&1; then
         sudo cp "${TEMP_DIR}/node_setup" /etc/sudoers.d/node_setup
         msg_ok "${USER_ID} logged in, root privileges obtained, and timeout extended to $TIMEOUT minutes."
     else
@@ -371,12 +371,11 @@ FUNC_PKG_CHECK(){
         echo
 
         echo -e "${GREEN}## cycle through packages in vars file, and install... ${NC}"
-        apt-get update >/dev/null 2>&1
         for a in "${SYS_PACKAGES[@]}"
         do
             if ! command -v $a &> /dev/null; then
                 msg_info "installing $a...                                                                                  "
-                apt-get install -y "$a" 2>&1 | awk -v app="$a" '{ printf "\r\033[K   installing %s.. ", app; printf "%s", $0; fflush() }'
+                sudo apt-get install -y "$a" 2>&1 | awk -v app="$a" '{ printf "\r\033[K   installing %s.. ", app; printf "%s", $0; fflush() }'
                 msg_ok "$a installed."
             else
                 msg_ok "$a was already installed."
@@ -737,7 +736,7 @@ FUNC_XAHAUD_UPDATER(){
     if [[ "$AUTOUPDATE_XAHAUD" == "true" ]]; then
 
         # Ensure the log directory exists
-        mkdir -p "$LOG_DIR"
+        sudo mkdir -p "$LOG_DIR"
 
         # Copy the provided update script to /usr/local/bin
         cat << 'EOF' > "$UPDATE_SCRIPT_PATH"
@@ -820,7 +819,7 @@ log "Update available: No"
 fi
 EOF
         # Make the update script executable
-        chmod +x "$UPDATE_SCRIPT_PATH"
+        sudo chmod +x "$UPDATE_SCRIPT_PATH"
 
         # add to cronjob
         cron_job="0 */${AUTOUPDATE_CHECK_INTERVAL} * * * root sleep \$((RANDOM*3540/32768)) && $UPDATE_SCRIPT_PATH >> $LOG_FILE 2>&1"
@@ -867,9 +866,10 @@ FUNC_UFW_SETUP(){
             echo
             echo -e "${GREEN}## ${YELLOW}Setup: Installing UFW... ${NC}"
             echo
-            msg_info "installing ufw"
-            apt-get install -y ufw 2>&1 | awk '{ printf "\r\033[K   installing ufw.. "; printf "%s", $0; fflush() }'
-            msg_ok "ufw installed"
+            msg_info "installing ufw..."
+            sudo apt-get update >/dev/null 2>&1
+            sudo apt-get install -y ufw 2>&1 | awk '{ printf "\r\033[K   installing ufw.. "; printf "%s", $0; fflush() }'
+            msg_ok "ufw installed."
             FUNC_SETUP_UFW_PORTS;
             FUNC_ENABLE_UFW;
         fi
@@ -945,9 +945,10 @@ FUNC_CERTBOT_PRECHECK(){
     echo
 
     # Install Let's Encrypt Certbot
-    msg_info "installing certbot"
-    apt-get install certbot python3-certbot-nginx -y 2>&1 | awk '{ printf "\r\033[K   installing certbot.. "; printf "%s", $0; fflush() }'
-    msg_ok "certbot installed"
+    msg_info "installing certbot..."
+    sudo apt-get update >/dev/null 2>&1
+    sudo apt-get install certbot python3-certbot-nginx -y 2>&1 | awk '{ printf "\r\033[K   installing certbot.. "; printf "%s", $0; fflush() }'
+    msg_ok "certbot installed."
     echo -e "${GREEN}#########################################################################${NC}"
     echo
     sleep 1s
@@ -2032,8 +2033,8 @@ FUNC_NGINX_CLEAR_RECREATE() {
     echo -e "${GREEN}## ${YELLOW}Checking and installing NGINX... ${NC}"
     if ! command -v nginx &> /dev/null; then
         msg_info "installing nginx...                                                                                  "
-        apt-get update >/dev/null 2>&1
-        apt-get install -y nginx 2>&1 | awk '{ printf "\r\033[K   installing nginx.. "; printf "%s", $0; fflush() }'
+        sudo apt-get update >/dev/null 2>&1
+        sudo apt-get install -y nginx 2>&1 | awk '{ printf "\r\033[K   installing nginx.. "; printf "%s", $0; fflush() }'
         msg_ok "nginx installed."
     else
         echo -e "${GREEN}## NGINX is already installed... ${NC}"
