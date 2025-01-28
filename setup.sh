@@ -195,7 +195,7 @@ IPv6="auto"
 # *      these are for the script/nginx setups            *
 
 # system packages that the main script depends on;
-SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-requests python3-toml whois htop sysstat apache2-utils)
+SYS_PACKAGES=(net-tools git curl gpg nano cron python3 python3-requests python3-toml whois htop sysstat apache2-utils)
 
 # variables for nginx
 NGX_CONF_ENABLED="/etc/nginx/sites-enabled/"
@@ -261,7 +261,7 @@ if [ -z "$vars_version" ] || [ "$vars_version" == "0.8.7" ] || [ "$vars_version"
     sudo sed -i "s/^NGX_TESTNET_WSS=.*/NGX_TESTNET_WSS=\"6009\"/" $SCRIPT_DIR/xahl_node.vars
     sudo sed -i "s/^NGX_TESTNET_RPC=.*/NGX_TESTNET_RPC=\"5009\"/" $SCRIPT_DIR/xahl_node.vars
     sudo sed -i '/^SYS_PACKAGES/d' $SCRIPT_DIR/xahl_node.vars
-    sudo sed -i '/^# ubuntu packages that the main script depends on;/a\SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-requests python3-toml whois htop sysstat apache2-utils)' $SCRIPT_DIR/xahl_node.vars
+    sudo sed -i '/^# ubuntu packages that the main script depends on;/a\SYS_PACKAGES=(net-tools git curl gpg nano cron python3 python3-requests python3-toml whois htop sysstat apache2-utils)' $SCRIPT_DIR/xahl_node.vars
     echo -e "${GREEN}## ${YELLOW}xahl-node.vars file updated to version 0.89... ${NC}"
 fi
 
@@ -307,7 +307,7 @@ IPv6="auto"
 # *      these are for the script/nginx setups            *
 
 # system packages that the main script depends on;
-SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-requests python3-toml whois htop sysstat apache2-utils)
+SYS_PACKAGES=(net-tools git curl gpg nano cron python3 python3-requests python3-toml whois htop sysstat apache2-utils)
 
 # variables for nginx
 NGX_CONF_ENABLED="/etc/nginx/sites-enabled/"
@@ -339,7 +339,7 @@ fi
 
 if [ "$vars_version" == "0.95" ]; then
     vars_version="$version"
-    sudo sed -i '/^# ubuntu packages that the main script depends on;/a\SYS_PACKAGES=(net-tools git curl gpg nano node-ws python3 python3-requests python3-toml whois htop sysstat apache2-utils)' $SCRIPT_DIR/xahl_node.vars
+    sudo sed -i '/^# ubuntu packages that the main script depends on;/a\SYS_PACKAGES=(net-tools git curl gpg nano cron python3 python3-requests python3-toml whois htop sysstat apache2-utils)' $SCRIPT_DIR/xahl_node.vars
 fi
 
 source $SCRIPT_DIR/xahl_node.vars
@@ -610,7 +610,7 @@ FUNC_CLONE_NODE_SETUP(){
 
 sudo cat <<EOF > /opt/xahaud/etc/xahaud.cfg
 [peers_max]
-20
+10
 
 [overlay]
 ip_limit = 1024
@@ -846,8 +846,8 @@ FUNC_UFW_SETUP(){
     echo 
     echo -e "${GREEN}## ${YELLOW}Setup: Checking UFW... ${NC}"
     echo
-    sudo ufw version
-    if [ $? = 0 ]; then
+
+    if command -v ufw &> /dev/null; then
         echo -e "${GREEN}UFW is ALREADY installed ${NC}"
         echo
         # Setup UFW
@@ -1863,10 +1863,10 @@ footer a:hover {
 EOF
     echo
     echo -e "${GREEN}## ${YELLOW}Setup: (re)downlaoding the .toml updater, and setting permissions ${NC}"
-    sudo rm -f /root/xahl-node/updater.py
-    sudo wget -O /root/xahl-node/updater.py $TOMLUPDATER_URL
-    sudo chmod +x /root/xahl-node/updater.py
-    cron_job="*/15 * * * * /usr/bin/python3 /root/xahl-node/updater.py"
+    sudo rm -f $SCRIPT_DIR/updater.py
+    sudo wget -O $SCRIPT_DIR/updater.py $TOMLUPDATER_URL
+    sudo chmod +x $SCRIPT_DIR/updater.py
+    cron_job="*/15 * * * * /usr/bin/python3 $SCRIPT_DIR/updater.py"
     echo
     if sudo crontab -l 2>/dev/null| grep -Fxq "$cron_job"; then
         echo -e "${GREEN}## ${YELLOW}Setup: Cron job for .toml updater already exists. No changes made. ${NC}"
@@ -1941,7 +1941,7 @@ EOF
     sleep 2s
 
     # run the .toml uppdater to get fresh new data in file.
-    /usr/bin/python3 /root/xahl-node/updater.py
+    /usr/bin/python3 $SCRIPT_DIR/updater.py
 }
 
 
