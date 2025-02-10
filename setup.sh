@@ -822,7 +822,7 @@ EOF
         sudo chmod +x "$UPDATE_SCRIPT_PATH"
 
         # add to cronjob
-        cron_job="0 */${AUTOUPDATE_CHECK_INTERVAL} * * * root sleep \$((RANDOM*3540/32768)) && $UPDATE_SCRIPT_PATH >> $LOG_FILE 2>&1"
+        cron_job="0 */${AUTOUPDATE_CHECK_INTERVAL} * * * sleep \$((RANDOM*3540/32768)) && $UPDATE_SCRIPT_PATH >> $LOG_FILE 2>&1"
         existing_crontab=$(crontab -l 2>/dev/null) || existing_crontab=""
         if echo "$existing_crontab" | grep -q "$UPDATE_SCRIPT_PATH"; then
             existing_crontab=$(echo "$existing_crontab" | grep -v "$UPDATE_SCRIPT_PATH")
