@@ -739,7 +739,7 @@ FUNC_XAHAUD_UPDATER(){
         sudo mkdir -p "$LOG_DIR"
 
         # Copy the provided update script to /usr/local/bin
-        sudo cat << #'EOF' > "$UPDATE_SCRIPT_PATH"
+        sudo cat << 'EOF' > "$UPDATE_SCRIPT_PATH"
 #!/bin/bash
 # Copy this file to /usr/local/bin as root
 # make it executable - chmod +x /usr/local/bin/root
