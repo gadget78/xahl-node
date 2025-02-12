@@ -739,7 +739,7 @@ FUNC_XAHAUD_UPDATER(){
         sudo mkdir -p "$LOG_DIR"
 
         # Copy the provided update script to /usr/local/bin
-        sudo cat << 'EOF' > "$UPDATE_SCRIPT_PATH"
+        sudo cat << #'EOF' > "$UPDATE_SCRIPT_PATH"
 #!/bin/bash
 # Copy this file to /usr/local/bin as root
 # make it executable - chmod +x /usr/local/bin/root
@@ -778,24 +778,20 @@ fi
 # Ensure the script runs as root
 [[ $EUID -ne 0 ]] && exit 1
 
-# Fetch available versions
-filenames=$(curl --silent "${URL}" | grep -Eo '>[^<]+<' | sed -e 's/^>//' -e 's/<$//' | grep -E '^\S+\+[0-9]{2,3}$' | grep -E "$RELEASE_TYPE")
-
+# Fetch and Sort version
 if [[ "$VERSION" == "latest" ]]; then
 version_filter="release"
 else
 version_filter=$VERSION
 fi
-
-# Sort using version comparison and fetch the latest one
-version_file=$(echo "$filenames" | grep "$version_filter" | sort -V | tail -n 1)
+version_file=$(curl "${URL}" 2>/dev/null | grep $version_filter | grep -v releaseinfo | sed -E 's/(<a href[^>]*?>).*/\1/g' | sed -E 's/(^[^"]+"|"[^"]+$)//g' | sort -t'B' -k2n -n | tail -n 1)
 
 if [[ -z "$version_file" ]]; then
-log "No update found."
+log "error: unable to obtain or filter update list"
 exit 0
 fi
 
-log "New Update: $version_file"
+log "Newest Update file found: $version_file"
 
 if [[ ! -f "$DL_DIR/$version_file" ]]; then
 curl --silent --fail "${URL}${version_file}" -o "$DL_DIR/$version_file"
@@ -806,6 +802,7 @@ fi
 
 current_file=$(readlink "$BIN_DIR/$PROGRAM")
 if [[ "$current_file" != "$DL_DIR/$version_file" ]]; then
+log "Update available: Yes, linking and setting up"
 ln -snf "$DL_DIR/$version_file" "$BIN_DIR/$PROGRAM"
 log "Symlink updated to $version_file"
 
@@ -813,7 +810,7 @@ log "Symlink updated to $version_file"
 log "Restarting $SERVICE_NAME"
 systemctl restart $SERVICE_NAME
 
-log "Update available: Yes"
+log "Update available: update sequence finished"
 else
 log "Update available: No"
 fi
