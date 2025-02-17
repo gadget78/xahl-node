@@ -233,7 +233,7 @@ touch $SCRIPT_DIR/.env
 source $SCRIPT_DIR/.env
 
 # check and update old .vars file if it already exists
-if [ -z "$ALWAYS_ASK" ]; then
+if [ -z "${ALWAYS_ASK:-}" ]; then
     ALWAYS_ASK="true"
     sudo sh -c "echo 'ALWAYS_ASK="true"' >> $SCRIPT_DIR/xahl_node.vars"
 fi
