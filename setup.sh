@@ -32,34 +32,45 @@ color
 spinner() {
     local chars="/-\|"
     local spin_i=0
-    printf "\e[?25l"
+    if [[ -t 1 ]]; then printf "\e[?25l"; fi  # Hide cursor
     while true; do
-        printf "\r \e[36m%s\e[0m" "${chars:spin_i++%${#chars}:1}"
-        sleep 0.1
+      printf "\r \e[36m%s\e[0m" "${chars:spin_i++%${#chars}:1}"
+      sleep 0.1
     done
 }
 export -f spinner
 
 msg_info() {
-  if [[ -n "$SPINNER_PID" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then kill $SPINNER_PID > /dev/null && printf "\e[?25h"; fi
-  local msg="$1"
-  echo -ne " ${HOLD} ${YW}${msg}   "
-  spinner &
-  SPINNER_PID=$!
+    if [[ -n "$SPINNER_PID" ]] && ps -p "$SPINNER_PID" >/dev/null 2>&1; then
+      kill "$SPINNER_PID" > /dev/null
+      if [[ -t 1 ]]; then printf "\e[?25h"; fi # Show cursor
+    fi
+    local msg="$1"
+    printf "%b" " ${HOLD} ${YW}${msg}   "
+    if [[ -t 1 ]]; then
+        spinner &
+        SPINNER_PID=$!
+    fi
 }
 export -f msg_info
 
 msg_ok() {
-  if [[ -n "$SPINNER_PID" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then kill $SPINNER_PID > /dev/null && printf "\e[?25h"; fi
+  if [[ -n "${SPINNER_PID// }" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then 
+    kill $SPINNER_PID > /dev/null
+    if [[ -t 1 ]]; then printf "\e[?25h"; fi # Show cursor
+  fi
   local msg="$1"
-  echo -e "${BFR} ${CM} ${GN}${msg}${CL}"
+  printf "%b" "${BFR} ${CM} ${GN}${msg}${CL}\n"
 }
 export -f msg_ok
 
 msg_error() {
-  if [[ -n "$SPINNER_PID" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then kill $SPINNER_PID > /dev/null && printf "\e[?25h"; fi
+  if [[ -n "${SPINNER_PID// }" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then
+    kill $SPINNER_PID > /dev/null
+    if [[ -t 1 ]]; then printf "\e[?25h"; fi # Show cursor
+  fi
   local msg="$1"
-  echo -e "${BFR} ${CROSS} ${RD}${msg}${CL}"
+  printf "%b" "${BFR} ${CROSS} ${RD}${msg}${CL}\n"
 }
 export -f msg_error
 
@@ -71,7 +82,10 @@ trap cleanup EXIT
 trap SIGINT_EXIT SIGINT
 error_handler() {
     # clear
-    if [[ -n "$SPINNER_PID" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then kill $SPINNER_PID > /dev/null && printf "\e[?25h"; fi
+    if [[ -n "${SPINNER_PID// }" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then
+        kill $SPINNER_PID > /dev/null
+    fi
+    if [[ -t 1 ]]; then printf "\e[?25h"; fi # Show cursor
     local exit_code="$?"
     local line_number="$1"
     local command="$2"
@@ -80,7 +94,10 @@ error_handler() {
     msg_error "an error occured, see above, cleared created temp directoy ($TEMP_DIR), and cleanly exiting..."
 }
 cleanup() {
-    if [[ -n "${SPINNER_PID// }" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then kill $SPINNER_PID > /dev/null && printf "\e[?25h"; fi
+    if [[ -n "${SPINNER_PID// }" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then
+        kill $SPINNER_PID > /dev/null
+    fi
+    if [[ -t 1 ]]; then printf "\e[?25h"; fi # Show cursor
     popd >/dev/null
     sudo sh -c 'rm -f /etc/sudoers.d/node_setup'
     sudo rm -rf $TEMP_DIR
@@ -237,23 +254,23 @@ if [ -z "${ALWAYS_ASK:-}" ]; then
     ALWAYS_ASK="true"
     sudo sh -c "echo 'ALWAYS_ASK="true"' >> $SCRIPT_DIR/xahl_node.vars"
 fi
-if [ -z "$NGINX_PROXY_IP" ]; then
+if [ -z "${NGINX_PROXY_IP:-}" ]; then
     NGINX_PROXY_IP="192.168.0.0/16"
     sed -i '/^NGIINX_PROXY_IP/d' $SCRIPT_DIR/xahl_node.vars
     #sudo sh -c "echo 'NGINX_PROXY_IP="192.168.0.0/16"' >> $SCRIPT_DIR/xahl_node.vars"
     sudo sed -i '/^NGINX_ALLOWLIST_FILE="nginx_allowlist.conf"/a\NGINX_PROXY_IP="192.168.0.0/16"' $SCRIPT_DIR/xahl_node.vars
     echo -e "${GREEN}## ${YELLOW}xahl-node.vars file updated, by adding entry NGINX_PROXY_IP... ${NC}"
 fi
-if [ -z "$TOMLUPDATER_URL" ]; then
+if [ -z "${TOMLUPDATER_URL:-}" ]; then
     TOMLUPDATER_URL=https://raw.githubusercontent.com/gadget78/ledger-live-toml-updating/node-dev/validator/update.py
     sudo sh -c "echo '\n# variables for toml updater' >> $SCRIPT_DIR/xahl_node.vars"
     sudo sh -c "echo 'TOMLUPDATER_URL=https://raw.githubusercontent.com/gadget78/ledger-live-toml-updating/node-dev/validator/update.py' >> $SCRIPT_DIR/xahl_node.vars"
     echo -e "${GREEN}## ${YELLOW}xahl-node.vars file updated, by adding entry TOMLUPDATER_URL... ${NC}"
 fi
-if [ -z "$IPv6" ]; then
+if [ -z "${IPv6:-}" ]; then
     sudo sed -i "/^INSTALL_TOML=*/a\\ \n# ipv6 can be set to auto (default), true or false, auto uses command \"ip a | grep -c 'inet6.*::1/128'\"\nIPv6=\"auto\"" $SCRIPT_DIR/xahl_node.vars
 fi
-if [ -z "$vars_version" ] || [ "$vars_version" == "0.8.7" ] || [ "$vars_version" == "0.8.8" ]; then
+if [ -z "${vars_version:-}" ] || [ "$vars_version" == "0.8.7" ] || [ "$vars_version" == "0.8.8" ]; then
     vars_version=0.89
     sudo sed -i '/^vars_version/d' $SCRIPT_DIR/xahl_node.vars
     sudo sh -c "sed -i '1i vars_version=$version' $SCRIPT_DIR/xahl_node.vars"
@@ -265,7 +282,7 @@ if [ -z "$vars_version" ] || [ "$vars_version" == "0.8.7" ] || [ "$vars_version"
     echo -e "${GREEN}## ${YELLOW}xahl-node.vars file updated to version 0.89... ${NC}"
 fi
 
-if echo "$vars_version" | awk '{ exit !($1 < 0.94) }'; then
+if echo "${vars_version:-}" | awk '{ exit !($1 < 0.94) }'; then
     echo -e "xahl_node.vars file needs updating, importing old variables...${NC}"
     sudo rm -f $SCRIPT_DIR/xahl_node.vars
     sudo cat <<EOF > $SCRIPT_DIR/xahl_node.vars
@@ -337,7 +354,7 @@ LOG_FILE="\$LOG_DIR/update.log"
 EOF
 fi
 
-if [ "$vars_version" == "0.95" ]; then
+if [ "${vars_version:-}" == "0.95" ]; then
     vars_version="$version"
     sudo sed -i '/^# ubuntu packages that the main script depends on;/a\SYS_PACKAGES=(net-tools git curl gpg nano cron python3 python3-requests python3-toml whois htop sysstat apache2-utils)' $SCRIPT_DIR/xahl_node.vars
 fi
