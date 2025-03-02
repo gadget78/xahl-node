@@ -1,5 +1,5 @@
 #!/bin/bash
-version=0.96
+version=0.97
 
 ###################################################################################
 # setup message, variables, and functions for script.
@@ -130,10 +130,12 @@ FDATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 USER_ID=$(getent passwd $EUID | cut -d: -f1)
 TEMP_DIR=$(mktemp -d)
 pushd $TEMP_DIR >/dev/null
-cd ~
-sudo mkdir -p xahl-node
-cd ~/xahl-node
-SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+
+if [ -z "${SCRIPT_DIR:-}" ]; then
+    sudo mkdir -p "$HOME"/xahl-node
+    cd "$HOME"/xahl-node
+    SCRIPT_DIR="$HOME/xahl-node"
+fi
 
 ###################################################################################
 # Authenticate sudo permissions, and extend time out before script execution to avoid timeouts or errors.
@@ -145,7 +147,7 @@ if ! command -v sudo &> /dev/null; then
 fi
 
 if [ "$(id -u)" -eq 0 ]; then
-    msg_ok "Privileges checked, user /"${USER_ID}/" has root privileges.${CL}"
+    msg_ok "Privileges checked, user /"${USER_ID}/" has sudo privileges, continuing to install in directory $SCRIPT_DIR${CL}"
 
 elif sudo -l > /dev/null 2>&1; then
 
@@ -190,21 +192,27 @@ vars_version="$version"
 NODE_CONFIG_FILE="/opt/xahaud/etc/xahaud.cfg"
 NODE_TYPE="node"               # can be node, nodeHistory, validator, validatorHistory
 NODE_SIZE="restricted"         # used in history TYPEs and can either be, "full" to remove all size restriction, or "restricted" which will use NODE_LEDGER_HISTORY and NODE_ONLINE_DELETE values.
+NODE_PEERS="10"
 NODE_LEDGER_HISTORY="26000"
 NODE_ONLINE_DELETE="26000"
 NODE_CHAIN_NAME="mainnet"      # can be either mainnet or testnet (aka VARVAL_CHAIN_NAME)
 
 # variables for script choices
 ALWAYS_ASK="true"
-SCRIPT_DIR="$HOME/xahl-node"       # by default this is now /home/, previously was always /root/ and not configurable
-INSTALL_SYS_PACKAGES="true"    # install and update all thats listed in system packages array below (this was called \$INSTALL_UPDATES in previous versions) 
+SCRIPT_DIR="\$HOME/xahl-node"   # by default this is now /home/, previously was always /root/ and not configurable
+INSTALL_SYS_PACKAGES="true"    # install and update all thats listed in SYS_PACKAGES array (this was called INSTALL_UPDATES in previous versions) 
 INSTALL_UFW="true"
 INSTALL_CERTBOT_SSL="true"
 INSTALL_LANDINGPAGE="true"
+INSTALL_LANDINGPAGE_PATH="/home/www"
 INSTALL_TOML="true"
+INSTALL_TOML_FILE="/home/www/.well-known/xahau.toml"
+INSTALL_TOML_UPDATER="true"
+RECREATE_NGINX_FILES="true"
+RECREATE_XAHAU_FILES="true"
 DISPLAY_FULL_LOG="false"
 
-# ipv6 can be set to auto (default), true or false, auto uses command \`ip a | grep -c 'inet6.*::1/128'\` 
+# ipv6 can be set to auto (default), true or false, auto uses command ip a | grep -c 'inet6.*::1/128'
 IPv6="auto" 
 
 # -------------------------------------------------------------------------------
@@ -242,6 +250,7 @@ UPDATE_SCRIPT_PATH="/usr/local/bin/\$UPDATE_SCRIPT_NAME"
 LOG_DIR="/opt/xahaud/log"
 LOG_FILE="\$LOG_DIR/update.log"
 EOF
+
 fi
 
 source $SCRIPT_DIR/xahl_node.vars
@@ -250,40 +259,13 @@ touch $SCRIPT_DIR/.env
 source $SCRIPT_DIR/.env
 
 # check and update old .vars file if it already exists
-if [ -z "${ALWAYS_ASK:-}" ]; then
-    ALWAYS_ASK="true"
-    sudo sh -c "echo 'ALWAYS_ASK="true"' >> $SCRIPT_DIR/xahl_node.vars"
-fi
-if [ -z "${NGINX_PROXY_IP:-}" ]; then
-    NGINX_PROXY_IP="192.168.0.0/16"
-    sed -i '/^NGIINX_PROXY_IP/d' $SCRIPT_DIR/xahl_node.vars
-    #sudo sh -c "echo 'NGINX_PROXY_IP="192.168.0.0/16"' >> $SCRIPT_DIR/xahl_node.vars"
-    sudo sed -i '/^NGINX_ALLOWLIST_FILE="nginx_allowlist.conf"/a\NGINX_PROXY_IP="192.168.0.0/16"' $SCRIPT_DIR/xahl_node.vars
-    echo -e "${GREEN}## ${YELLOW}xahl-node.vars file updated, by adding entry NGINX_PROXY_IP... ${NC}"
-fi
-if [ -z "${TOMLUPDATER_URL:-}" ]; then
-    TOMLUPDATER_URL=https://raw.githubusercontent.com/gadget78/ledger-live-toml-updating/node-dev/validator/update.py
-    sudo sh -c "echo '\n# variables for toml updater' >> $SCRIPT_DIR/xahl_node.vars"
-    sudo sh -c "echo 'TOMLUPDATER_URL=https://raw.githubusercontent.com/gadget78/ledger-live-toml-updating/node-dev/validator/update.py' >> $SCRIPT_DIR/xahl_node.vars"
-    echo -e "${GREEN}## ${YELLOW}xahl-node.vars file updated, by adding entry TOMLUPDATER_URL... ${NC}"
-fi
-if [ -z "${IPv6:-}" ]; then
-    sudo sed -i "/^INSTALL_TOML=*/a\\ \n# ipv6 can be set to auto (default), true or false, auto uses command \"ip a | grep -c 'inet6.*::1/128'\"\nIPv6=\"auto\"" $SCRIPT_DIR/xahl_node.vars
-fi
-if [ -z "${vars_version:-}" ] || [ "$vars_version" == "0.8.7" ] || [ "$vars_version" == "0.8.8" ]; then
+if [ -z "${vars_version:-}" ] || [ "$vars_version" == "0.8.6" ] || [ "$vars_version" == "0.8.7" ] || [ "$vars_version" == "0.8.8" ]; then
     vars_version=0.89
-    sudo sed -i '/^vars_version/d' $SCRIPT_DIR/xahl_node.vars
-    sudo sh -c "sed -i '1i vars_version=$version' $SCRIPT_DIR/xahl_node.vars"
-    sudo sed -i "s/^NGX_MAINNET_WSS=.*/NGX_MAINNET_WSS=\"6009\"/" $SCRIPT_DIR/xahl_node.vars
-    sudo sed -i "s/^NGX_TESTNET_WSS=.*/NGX_TESTNET_WSS=\"6009\"/" $SCRIPT_DIR/xahl_node.vars
-    sudo sed -i "s/^NGX_TESTNET_RPC=.*/NGX_TESTNET_RPC=\"5009\"/" $SCRIPT_DIR/xahl_node.vars
-    sudo sed -i '/^SYS_PACKAGES/d' $SCRIPT_DIR/xahl_node.vars
-    sudo sed -i '/^# ubuntu packages that the main script depends on;/a\SYS_PACKAGES=(net-tools git curl gpg nano cron python3 python3-requests python3-toml whois htop sysstat apache2-utils)' $SCRIPT_DIR/xahl_node.vars
-    echo -e "${GREEN}## ${YELLOW}xahl-node.vars file updated to version 0.89... ${NC}"
+    echo -e "${GREEN}## ${YELLOW}old version of xahl-node.vars found... ${NC}"
 fi
 
-if echo "${vars_version:-}" | awk '{ exit !($1 < 0.94) }'; then
-    echo -e "xahl_node.vars file needs updating, importing old variables...${NC}"
+if echo "${vars_version:-}" | awk '{ exit !($1 < 0.97) }'; then
+    echo -e "${GREEN}## ${YELLOW}xahl_node.vars file needs updating, importing old variables...${NC}"
     sudo rm -f $SCRIPT_DIR/xahl_node.vars
     sudo cat <<EOF > $SCRIPT_DIR/xahl_node.vars
 vars_version="$version"
@@ -297,66 +279,70 @@ vars_version="$version"
 #    install_toml, as above, you can force setup from messing with you .toml file
 
 # variables for node setup
-NODE_CONFIG_FILE="/opt/xahaud/etc/xahaud.cfg"
-NODE_TYPE="node"            # can be node, nodeHistory, validator, validatorHistory
-NODE_SIZE="restricted"      # used in history TYPEs and can either be, "full" to remove all size restriction, or "restricted" which will use NODE_LEDGER_HISTORY and NODE_ONLINE_DELETE values.
-NODE_LEDGER_HISTORY="26000"
-NODE_ONLINE_DELETE="26000"
-NODE_CHAIN_NAME="$VARVAL_CHAIN_NAME"    # can be either mainnet or testnet (aka VARVAL_CHAIN_NAME)
+NODE_CONFIG_FILE="${NODE_CONFIG_FILE:-/opt/xahaud/etc/xahaud.cfg}"
+NODE_TYPE="${NODE_TYPE:-node}"               # can be node, nodeHistory, validator, validatorHistory
+NODE_SIZE="${NODE_SIZE:-restricted}"         # used in history TYPEs and can either be, "full" to remove all size restriction, or "restricted" which will use NODE_LEDGER_HISTORY and NODE_ONLINE_DELETE values.
+NODE_PEERS="${NODE_PEERS:-10}"
+NODE_LEDGER_HISTORY="${NODE_LEDGER_HISTORY:-26000}"
+NODE_ONLINE_DELETE="${NODE_ONLINE_DELETE:-26000}"
+NODE_CHAIN_NAME="${NODE_CHAIN_NAME:-mainnet}"      # can be either mainnet or testnet (aka VARVAL_CHAIN_NAME)
 
 # variables for script choices
-ALWAYS_ASK="$ALWAYS_ASK"
-SCRIPT_DIR="$SCRIPT_DIR"                    # this is now /home/xahl-node by default, previously was always /root/xahl-root and not configurable
-INSTALL_SYS_PACKAGES="$INSTALL_UPDATES"     # (aka SYS_UPDATES) install and update all thats listed in system packages array below
-INSTALL_UFW="$INSTALL_UFW"
-INSTALL_CERTBOT_SSL="$INSTALL_CERTBOT_SSL"
-INSTALL_LANDINGPAGE="$INSTALL_LANDINGPAGE"
-INSTALL_TOML="$INSTALL_TOML"
-AUTOUPDATE_XAHAUD="true"
-AUTOUPDATE_CHECK_INTERVAL="24"
-DISPLAY_FULL_LOG="false"
+ALWAYS_ASK="${ALWAYS_ASK:-true}"
+SCRIPT_DIR="${SCRIPT_DIR:-$HOME/xahl-node}"   # by default this is now /home/, previously was always /root/ and not configurable
+INSTALL_SYS_PACKAGES="${INSTALL_SYS_PACKAGES:-true}"    # install and update all thats listed in SYS_PACKAGES array (this was called INSTALL_UPDATES in previous versions) 
+INSTALL_UFW="${INSTALL_UFW:-true}"
+INSTALL_CERTBOT_SSL="${INSTALL_CERTBOT_SSL:-true}"
+INSTALL_LANDINGPAGE="${INSTALL_LANDINGPAGE:-true}"
+INSTALL_LANDINGPAGE_PATH="${INSTALL_LANDINGPAGE_PATH:-/home/www}"
+INSTALL_TOML="${INSTALL_TOML:-true}"
+INSTALL_TOML_FILE="${INSTALL_TOML_FILE:-/home/www/.well-known/xahau.toml}"
+INSTALL_TOML_UPDATER="${INSTALL_TOML_UPDATER:-true}"
+RECREATE_NGINX_FILES="${RECREATE_NGINX_FILES:-true}"
+RECREATE_XAHAU_FILES="${RECREATE_XAHAU_FILES:-true}"
+DISPLAY_FULL_LOG="${DISPLAY_FULL_LOG:-false}"
 
-# ipv6 can be set to auto (default), true or false, auto uses command \`ip a | grep -c 'inet6.*::1/128'\` 
-IPv6="auto" 
+# ipv6 can be set to auto (default), true or false, auto uses command ip a | grep -c 'inet6.*::1/128'
+IPv6="${IPv6:-auto}" 
 
-# -------------------------------------------------------------------------------
-# *** the following variables DO NOT need to be changed ***
-# *      these are for the script/nginx setups            *
+# ----------------------------------------------------------------------------------
+# *** the following variables are less user friendly and needs care when changed ***
+# *** as these are for the script and nginx setups
 
 # system packages that the main script depends on;
-SYS_PACKAGES=(net-tools git curl gpg nano cron python3 python3-requests python3-toml whois htop sysstat apache2-utils)
+SYS_PACKAGES="(net-tools git curl gpg nano cron python3 python3-requests python3-toml whois htop sysstat apache2-utils)"
 
 # variables for nginx
-NGX_CONF_ENABLED="/etc/nginx/sites-enabled/"
-NGX_CONF_NEW="/etc/nginx/sites-available/"
-NGINX_CONF_FILE="/etc/nginx/nginx.conf"
-NGINX_ALLOWLIST_FILE="nginx_allowlist.conf"
-NGINX_PROXY_IP="$NGINX_PROXY_IP"
+NGX_CONF_ENABLED="${NGX_CONF_ENABLED:-/etc/nginx/sites-enabled/}"
+NGX_CONF_NEW="${NGX_CONF_NEW:-/etc/nginx/sites-available/}"
+NGINX_CONF_FILE="${NGINX_CONF_FILE:-/etc/nginx/nginx.conf}"
+NGINX_ALLOWLIST_FILE="${NGINX_ALLOWLIST_FILE:-nginx_allowlist.conf}"
+NGINX_PROXY_IP="${NGINX_PROXY_IP:-192.168.0.0/16}"
 
 # MAINNET
-NGX_MAINNET_RPC="6007"
+NGX_MAINNET_RPC="${NGX_MAINNET_RPC:-6007}"
 NGX_MAINNET_WSS="6009" # set to 6009 for admin port
-XAHL_MAINNET_PEER="21337"
+XAHL_MAINNET_PEER="${XAHL_MAINNET_PEER:-21337}"
 
 # TESTNET
-NGX_TESTNET_RPC="5009"
-NGX_TESTNET_WSS="6009"
-XAHL_TESTNET_PEER="21338"
+NGX_TESTNET_RPC="${NGX_TESTNET_RPC:-5009}"
+NGX_TESTNET_WSS="${NGX_TESTNET_WSS:-6009}"
+XAHL_TESTNET_PEER="${XAHL_TESTNET_PEER:-21338}"
 
 # variables for toml updater
-TOMLUPDATER_URL=https://raw.githubusercontent.com/gadget78/ledger-live-toml-updating/node-dev/validator/update.py
+TOMLUPDATER_URL="${TOMLUPDATER_URL:-https://raw.githubusercontent.com/gadget78/ledger-live-toml-updating/node-dev/validator/update.py}"
 
 # variables for XAHAUD AUTO UPDATER
-UPDATE_SCRIPT_NAME="xahaud-silent-update.sh"
-UPDATE_SCRIPT_PATH="/usr/local/bin/\$UPDATE_SCRIPT_NAME"
-LOG_DIR="/opt/xahaud/log"
-LOG_FILE="\$LOG_DIR/update.log"
+AUTOUPDATE_XAHAUD="${AUTOUPDATE_XAHAUD:-true}"
+AUTOUPDATE_CHECK_INTERVAL="${AUTOUPDATE_CHECK_INTERVAL:-24}"
+UPDATE_SCRIPT_NAME="${UPDATE_SCRIPT_NAME:-xahaud-silent-update.sh}"
+UPDATE_SCRIPT_PATH="${UPDATE_SCRIPT_PATH:-/usr/local/bin/\$UPDATE_SCRIPT_NAME}"
+LOG_DIR="${LOG_DIR:-/opt/xahaud/log}"
+LOG_FILE="${LOG_FILE:-\$LOG_DIR/update.log}"
 EOF
-fi
-
-if [ "${vars_version:-}" == "0.95" ]; then
-    vars_version="$version"
-    sudo sed -i '/^# ubuntu packages that the main script depends on;/a\SYS_PACKAGES=(net-tools git curl gpg nano cron python3 python3-requests python3-toml whois htop sysstat apache2-utils)' $SCRIPT_DIR/xahl_node.vars
+    msg_ok "xahl_node.vars file updated"
+else
+    msg_ok "xahl_node.vars file version checks ok."
 fi
 
 source $SCRIPT_DIR/xahl_node.vars
@@ -436,20 +422,24 @@ FUNC_SETUP_MODE(){
         echo "Please choose an option:"
         echo "1. Mainnet = configures and deploys/updates xahau node for Mainnet"
         echo "2. Testnet = configures and deploys/updates xahau node for Testnet"
-        read -p "Enter your choice [1-3] # " choice
         
-        case $choice in
-            1) 
-                NODE_CHAIN_NAME="mainnet"
-                ;;
-            2) 
-                NODE_CHAIN_NAME="testnet"
-                ;;
-            *) 
-                echo "Invalid option. Exiting."
-                FUNC_EXIT
-                ;;
-        esac
+        while true; do
+            read -p "Enter your choice [1-3] # " choice
+            case $choice in
+                1) 
+                    NODE_CHAIN_NAME="mainnet"
+                    break
+                    ;;
+                2) 
+                    NODE_CHAIN_NAME="testnet"
+                    break
+                    ;;
+                * ) 
+                    echo "Please answer with a valid option."
+                    ;;
+            esac
+        done
+
         sed -i "s/^NODE_CHAIN_NAME=.*/NODE_CHAIN_NAME=\"$NODE_CHAIN_NAME\"/" $SCRIPT_DIR/xahl_node.vars
     fi
 
@@ -489,63 +479,74 @@ FUNC_CLONE_NODE_SETUP(){
         echo -e "1. \"Submission Node\", this will setup the Node to use RAM for the database, so no need for a fast Solid State HDD, suitable for 8+GB RAM, 16+GB HDD"
         echo -e "2. \"History Node\", this will use the Hard drive for the database storage (drive MUST be a Solid State type), so it is able to keep a history of ledgers, suitable for 16GB+ RAM (HDD space required depends on next question)"
         echo -e "3. \"Validator\", this will setup a validator, suitable for 16+GB RAM, 64GB+ SSD+ ${NC}"
-        read -p "Enter your choice [1-3] # " choice
-        
-        case $choice in
-            1) 
-                NODE_TYPE="node"
-                ;;
-            2) 
-                NODE_TYPE="nodeHistory"
-                ;;
-            3) 
-                echo -e "${BLUE}Please choose validator type:"
-                echo -e "1. \"RAM\" type where no history is stored."
-                echo -e "2. \"history\" type where it uses the hard drive to store ledgers (space required depends on next question)${NC}"
-                read -p "Enter your choice [1-2] # " type
-                case $type in
-                    1) 
-                        NODE_TYPE="validator"
-                        ;;
-                    2) 
-                        NODE_TYPE="validatorHistory"
-                        ;;
-                    *) 
-                        echo "Invalid option. Exiting."
-                        FUNC_EXIT
-                        ;;
-                esac
-                ;;
-            *) 
-                echo "Invalid option. Exiting."
-                FUNC_EXIT
-                ;;
-        esac
+
+        while true; do
+            read -p "Enter your choice [1-3] # " choice
+            case $choice in
+                1) 
+                    NODE_TYPE="node"
+                    break
+                    ;;
+                2) 
+                    NODE_TYPE="nodeHistory"
+                    break
+                    ;;
+                3) 
+                    echo -e "${BLUE}Please choose validator type:"
+                    echo -e "1. \"RAM\" type where no history is stored."
+                    echo -e "2. \"history\" type where it uses the hard drive to store ledgers (space required depends on next question)${NC}"
+                    while true; do
+                        read -p "Enter your choice [1-2] # " type
+                        case $type in
+                            1) 
+                                NODE_TYPE="validator"
+                                break 2
+                                ;;
+                            2) 
+                                NODE_TYPE="validatorHistory"
+                                break 2
+                                ;;
+                            *) 
+                                echo "Please answer with a valid option."
+                                ;;
+                        esac
+                    done
+                    ;;
+                *) 
+                    echo "Please answer with a valid option."
+                    ;;
+            esac
+        done
+
         if sudo grep -q 'NODE_TYPE=' "$SCRIPT_DIR/.env"; then
             sudo sed -i "s/^NODE_TYPE=.*/NODE_TYPE=\"$NODE_TYPE\"/" "$SCRIPT_DIR/.env"
         else
             sudo echo -e "NODE_TYPE=\"$NODE_TYPE\"" >> $SCRIPT_DIR/.env
         fi
+        sudo sed -i "s/^NODE_TYPE=.*/NODE_TYPE=\"$NODE_TYPE\"/" "$SCRIPT_DIR/xahl_node.vars"
     fi
 
     if  [[ "$NODE_TYPE" == "nodeHistory" && "$ALWAYS_ASK" == "true" ]] || [[ "$NODE_TYPE" == "validatorHistory" && "$ALWAYS_ASK" == "true" ]]; then
         echo -e "${BLUE}Please choose the amount of history you want to save:"
         echo -e "1. restricted = this will setup a restriction on hard drive use, so by default the limit will be a days worth of ledgers, which will needs roughly 64 GB of space"
         echo -e "2. full = this will configure the settings so that there will be NO restriction of size, making it a full history node, be warned this will take up terabytes of hard drive space ${NC}"
-        read -p "Enter your choice [1-2] # " choice
-        
-        case $choice in
-            1) 
-                NODE_SIZE="restricted"
-                ;;
-            2) 
-                NODE_SIZE="full"
-                ;;
-            *) 
-                echo "Invalid option. Exiting."
-                FUNC_EXIT
-                ;;
-        esac
+
+        while true; do
+            read -p "Enter your choice [1-2] # " choice        
+            case $choice in
+                1) 
+                    NODE_SIZE="restricted"
+                    break
+                    ;;
+                2) 
+                    NODE_SIZE="full"
+                    break
+                    ;;
+                *) 
+                    echo "Please answer with a valid option."
+                    ;;
+            esac
+        done
         sed -i "s/^NODE_SIZE=.*/NODE_SIZE=\"$NODE_SIZE\"/" $SCRIPT_DIR/xahl_node.vars
     fi
 
@@ -578,6 +579,20 @@ FUNC_CLONE_NODE_SETUP(){
                 sudo echo -e "NODE_VALIDATOR_TOKEN=\"$NODE_VALIDATOR_TOKEN\"" >> $SCRIPT_DIR/.env
             fi
         fi
+        echo -e "${BLUE}Would you like to recreate the xahau.cfg file even when it already exists ?"
+        echo -e "1. true, always recreate xahau.cfg, so that its kept to the latest standard (the Node Validator Token is preserved)"
+        echo -e "2. false, NEVER overwrite the xahau.cfg file, only create it if its not there.${NC}"
+        while true; do
+        read -p "Enter your choice [1-2] # " choice
+            if [ "$choice" == "1" ] || [ "$choice" == "true" ]; then
+                RECREATE_XAHAU_FILES="true"
+                break
+            elif [ "$choice" == "2" ] || [ "$choice" == "false" ]; then
+                RECREATE_XAHAU_FILES="false"
+                break
+            fi
+        done
+        sed -i "s/^RECREATE_XAHAU_FILES=.*/RECREATE_XAHAU_FILES=\"$RECREATE_XAHAU_FILES\"/" $SCRIPT_DIR/xahl_node.vars
     fi
 
     cd $SCRIPT_DIR
@@ -598,36 +613,38 @@ FUNC_CLONE_NODE_SETUP(){
 
     cd $SCRIPT_DIR/$VARVAL_CHAIN_REPO
     sudo ./xahaud-install-update.sh
-    sudo rm -f /opt/xahaud/etc/xahaud.cfg > /dev/null
-    sudo rm -f -r /opt/xahaud/db > /dev/null
-    
-    if [[ "$NODE_TYPE" == "nodeHistory" || "$NODE_TYPE" == "validatorHistory" ]]; then 
-        echo
-        echo -e "setting up HDD node...${NC}"
-        echo
-        if [ "$NODE_SIZE" == "full" ]; then
-            NODE_LEDGER_HISTORY="full"
-            NODE_ONLINE_DELETE=""
+
+    if [[ ! -f "/opt/xahaud/etc/xahaud.cfg" ]] || [ "$RECREATE_XAHAU_FILES" == "true" ]; then
+
+        sudo rm -f /opt/xahaud/etc/xahaud.cfg > /dev/null
+        sudo rm -f -r /opt/xahaud/db > /dev/null
+        if [[ "$NODE_TYPE" == "nodeHistory" || "$NODE_TYPE" == "validatorHistory" ]]; then 
+            echo
+            echo -e "setting up HDD $NODE_TYPE...${NC}"
+            echo
+            if [ "$NODE_SIZE" == "full" ]; then
+                NODE_LEDGER_HISTORY="full"
+                NODE_ONLINE_DELETE=""
+            fi
+            NODE_DB_TYPE="NuDB"
+            NODE_DB_PATH="path=/opt/xahaud/db/nudb"
+            NODE_DB_RELATIONAL="backend=sqlite"
+
+        else
+            echo
+            echo -e "setting up RAM type $NODE_TYPE...${NC}"
+            echo
+
+            NODE_LEDGER_HISTORY="256"
+            NODE_ONLINE_DELETE="256"
+            NODE_DB_TYPE="rwdb"
+            NODE_DB_PATH=""
+            NODE_DB_RELATIONAL="backend=rwdb"
         fi
-        NODE_DB_TYPE="NuDB"
-        NODE_DB_PATH="path=/opt/xahaud/db/nudb"
-        NODE_DB_RELATIONAL="backend=sqlite"
-
-    else
-        echo
-        echo -e "setting up RAM type node...${NC}"
-        echo
-
-        NODE_LEDGER_HISTORY="256"
-        NODE_ONLINE_DELETE="256"
-        NODE_DB_TYPE="rwdb"
-        NODE_DB_PATH=""
-        NODE_DB_RELATIONAL="backend=rwdb"
-    fi
 
 sudo cat <<EOF > /opt/xahaud/etc/xahaud.cfg
 [peers_max]
-10
+$NODE_PEERS
 
 [overlay]
 ip_limit = 1024
@@ -721,15 +738,16 @@ owner_reserve = 200000
 
 EOF
 
-    if [ "$NODE_TYPE" == "validator" ] || [ "$NODE_TYPE" == "validatorHistory" ]; then
-        echo "[validator_token]" >> /opt/xahaud/etc/xahaud.cfg
-        echo "$NODE_VALIDATOR_TOKEN" >> /opt/xahaud/etc/xahaud.cfg
-    fi
+        if [ "$NODE_TYPE" == "validator" ] || [ "$NODE_TYPE" == "validatorHistory" ]; then
+            echo "[validator_token]" >> /opt/xahaud/etc/xahaud.cfg
+            echo "$NODE_VALIDATOR_TOKEN" >> /opt/xahaud/etc/xahaud.cfg
+        fi
 
-    if [  "$IPv6" == "true" ]; then
-        echo -e "${YELLOW}applying IPv6 changes to xahaud.cfg file.${NC}"
-        sudo sed -i "s/0.0.0.0/::/g" /opt/xahaud/etc/xahaud.cfg
-        sudo sed -i "s/127.0.0.1/::1/g" /opt/xahaud/etc/xahaud.cfg
+        if [  "$IPv6" == "true" ]; then
+            echo -e "${YELLOW}applying IPv6 changes to xahaud.cfg file.${NC}"
+            sudo sed -i "s/0.0.0.0/::/g" /opt/xahaud/etc/xahaud.cfg
+            sudo sed -i "s/127.0.0.1/::1/g" /opt/xahaud/etc/xahaud.cfg
+        fi
     fi
 
     echo "restarting xahaud service"
@@ -842,10 +860,10 @@ EOF
             existing_crontab=$(echo "$existing_crontab" | grep -v "$UPDATE_SCRIPT_PATH")
             existing_crontab="${existing_crontab}"$'\n'"${cron_job}"
             echo "$existing_crontab" | crontab -
-            msg_ok "updated cron tab tasks, system will now check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours"
+            msg_ok "Auto Updater, updated cron tab tasks, system will now check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours"
         else
             (sudo crontab -l 2>&1 | grep -v -E "^no crontab for|^sudo:" || true; echo "$cron_job") | sudo crontab -
-            msg_ok "added new entry to cron tab tasks, system will check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours"
+            msg_ok "Auto Updater, added new entry to cron tab tasks, system will check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours"
         fi
     else
         msg_error "NOT adding AutoUpdate functions, due to AUTOUPDATE_XAHAUD set to ${AUTOUPDATE_XAHAUD} in xahl_node.vars file"
@@ -1035,7 +1053,7 @@ FUNC_INSTALL_LANDINGPAGE(){
     echo
     echo -e "${GREEN}#########################################################################${NC}"
     echo 
-    echo -e "${GREEN}## ${YELLOW}Setup: Installing Landing page, along with .toml updater... ${NC}"
+    echo -e "${GREEN}## ${YELLOW}Setup: (re)Installing Landing pages... ${NC}"
     echo
 
     if [ -z "$INSTALL_LANDINGPAGE" ]; then
@@ -1043,14 +1061,14 @@ FUNC_INSTALL_LANDINGPAGE(){
         sudo sed -i "s/^INSTALL_LANDINGPAGE=.*/INSTALL_LANDINGPAGE=\"$INSTALL_LANDINGPAGE\"/" $SCRIPT_DIR/xahl_node.vars
     fi
     if [ "$INSTALL_LANDINGPAGE" == "true" ]; then
-        
-        sudo mkdir -p /home/www
-        echo "created /home/www directory for webfiles, now re-installing webpage"
 
-        if [  -f /home/www/index.html ]; then
-            sudo rm -f /home/www/index.html
+        if [  -f "${INSTALL_LANDINGPAGE_PATH}/index.html" ]; then
+            sudo rm -f ${INSTALL_LANDINGPAGE_PATH}/index.html
         fi
-        sudo cat <<EOF > /home/www/index.html
+        sudo mkdir -p ${INSTALL_LANDINGPAGE_PATH}
+        echo "created ${INSTALL_LANDINGPAGE_PATH} directory for webfiles, now re-installing webpage"
+
+        sudo cat <<EOF > ${INSTALL_LANDINGPAGE_PATH}/index.html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1279,7 +1297,7 @@ footer a:hover {
         for (var i = 0; i < buttons.length; i++) {
             buttons[i].classList.remove('active');
         }
-        document.querySelector(`[onclick="openTab('\${tabId}')"]`).classList.add('active');
+        document.querySelector(\`[onclick="openTab('\${tabId}')"]\`).classList.add('active');
     }
 
     async function parseValue(value) {
@@ -1458,12 +1476,12 @@ footer a:hover {
 </html>
 EOF
 
-        sudo mkdir -p /home/www/error
-        echo "created /home/www/error directory for blocked page, re-installing webpage"
-        if [  -f /home/www/error/custom_403.html ]; then
-            sudo rm -r /home/www/error/custom_403.html
+        sudo mkdir -p ${INSTALL_LANDINGPAGE_PATH}/error
+        echo "created ${INSTALL_LANDINGPAGE_PATH}/error directory for blocked page, re-installing webpage"
+        if [  -f ${INSTALL_LANDINGPAGE_PATH}/error/custom_403.html ]; then
+            sudo rm -r ${INSTALL_LANDINGPAGE_PATH}/error/custom_403.html
         fi        
-        sudo cat <<EOF > /home/www/error/custom_403.html
+        sudo cat <<EOF > ${INSTALL_LANDINGPAGE_PATH}/error/custom_403.html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1696,7 +1714,7 @@ footer a:hover {
         for (var i = 0; i < buttons.length; i++) {
             buttons[i].classList.remove('active');
         }
-        document.querySelector(`[onclick="openTab('\${tabId}')"]`).classList.add('active');
+        document.querySelector(\`[onclick="openTab('\${tabId}')"]\`).classList.add('active');
     }
 
     async function parseValue(value) {
@@ -1875,19 +1893,6 @@ footer a:hover {
 </body>
 </html>
 EOF
-    echo
-    echo -e "${GREEN}## ${YELLOW}Setup: (re)downlaoding the .toml updater, and setting permissions ${NC}"
-    sudo rm -f $SCRIPT_DIR/updater.py
-    sudo wget -O $SCRIPT_DIR/updater.py $TOMLUPDATER_URL
-    sudo chmod +x $SCRIPT_DIR/updater.py
-    cron_job="*/15 * * * * /usr/bin/python3 $SCRIPT_DIR/updater.py"
-    echo
-    if sudo crontab -l 2>/dev/null| grep -Fxq "$cron_job"; then
-        echo -e "${GREEN}## ${YELLOW}Setup: Cron job for .toml updater already exists. No changes made. ${NC}"
-    else
-        (sudo crontab -l 2>&1 | grep -v -E "^no crontab for|^sudo:" || true; echo "$cron_job") | sudo crontab -
-        echo -e "${GREEN}## ${YELLOW}Setup: Cron job for .toml updater added successfully."
-    fi
 
     else
         echo -e "${GREEN}## ${YELLOW}Setup: Skipped re-installing Landng webpage install, due to vars file config... ${NC}"
@@ -1918,10 +1923,10 @@ EOF
 
 
 
-        sudo mkdir -p /home/www/.well-known
-        echo "created /home/www.well-known directory for .toml file, and re-creating default .toml file"
-        sudo rm -f /home/www/.well-known/xahau.toml
-        sudo cat <<EOF > /home/www/.well-known/xahau.toml
+        sudo mkdir -p ${INSTALL_TOML_FILE%/*}
+        echo "created ${INSTALL_LANDINGPAGE_PATH}/.well-known directory for .toml file, and re-creating default .toml file"
+        sudo rm -f $INSTALL_TOML_FILE
+        sudo cat <<EOF > $INSTALL_TOML_FILE
 [[METADATA]]
 created = $FDATE
 modified = $FDATE
@@ -1951,11 +1956,41 @@ EOF
         echo
         echo
     fi
-    echo
-    sleep 2s
 
-    # run the .toml uppdater to get fresh new data in file.
-    /usr/bin/python3 $SCRIPT_DIR/updater.py
+    if [ -z "$INSTALL_TOML_UPDATER" ]; then
+        read -p "Do you want to (re)install the .toml file updater?: true or false # " INSTALL_TOML
+        sudo sed -i "s/^INSTALL_TOML=.*/INSTALL_TOML=\"$INSTALL_TOML\"/" $SCRIPT_DIR/xahl_node.vars
+    fi
+    if [ "$INSTALL_TOML_UPDATER" == "true" ]; then
+        echo
+        echo -e "${GREEN}## ${YELLOW}Setup: (re)downlaoding the .toml updater, and setting permissions ${NC}"
+        rm -f $SCRIPT_DIR/updater.py 2>/dev/null
+        sudo wget -O $SCRIPT_DIR/toml_updater.py $TOMLUPDATER_URL && sudo chmod +x $SCRIPT_DIR/toml_updater.py
+        
+        echo -e "${GREEN}## ${YELLOW}Setup: adjusting .toml updater to local .vars settngs${NC}"
+        sudo sed -i "s|^\(toml_path = \).*|\1'$INSTALL_TOML_FILE'|" "$SCRIPT_DIR/toml_updater.py"
+        sudo sed -i "s|^\(node_config_path = \).*|\1'$NGINX_CONF_FILE'|" "$SCRIPT_DIR/toml_updater.py"
+        sudo sed -i "s|^\(allowlist_path = \).*|\1'${SCRIPT_DIR}/${NGINX_ALLOWLIST_FILE}'|" "$SCRIPT_DIR/toml_updater.py"
+        sudo sed -i "s|^\(websocket_port = \).*|\1'$NGX_MAINNET_WSS'|" "$SCRIPT_DIR/toml_updater.py"
+
+        msg_info "setting up a crontab job, to run the toml_updater every 15 mins"
+        cron_job="*/15 * * * * /usr/bin/python3 $SCRIPT_DIR/toml_updater.py"
+        if sudo crontab -l 2>/dev/null| grep -Fxq "$cron_job"; then
+            msg_ok "Cron job for .toml updater already exists. No changes made."
+        else
+            (sudo crontab -l 2>&1 | { grep -v -E "^no crontab for|^sudo:" || true; } | sed '\|toml_updater.py|d' | sed '\|updater.py|d'; echo "$cron_job") | sudo crontab - && msg_ok "Cron job for .toml updater (re)added to run every 15mins successfully."
+        fi
+
+        # manually run the .toml uppdater to get fresh new data in file.
+        /usr/bin/python3 $SCRIPT_DIR/toml_updater.py
+
+    else
+        echo -e "${GREEN}## ${YELLOW}Setup: Skipped re-installing the .toml file updater, due to vars file config... ${NC}"
+        echo
+        echo
+    fi
+
+    echo
 }
 
 
@@ -2006,6 +2041,17 @@ FUNC_ALLOWLIST_CHECK(){
         echo "External IP of the Node itself, $NODE_IP, already in list."
     fi
     echo
+
+    echo "capturing any IPs from a previous old type install, ready for the new type.."
+    OLD_ALLOWLIST=$(sed -n '/location \/ {/,/}/p' /etc/nginx/sites-available/xahau | grep -E --color=never 'allow [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+;' | sed 's/^[[:space:]]*//' || true)
+    if [ -n "$OLD_ALLOWLIST" ]; then
+        msg_ok "found allow list from past install, will add these to the allowlist;"
+        echo "$OLD_ALLOWLIST"
+        echo "$OLD_ALLOWLIST" >> $SCRIPT_DIR/nginx_allowlist.conf
+    else
+        echo "none found."
+    fi
+
     echo
     if [ "$ALWAYS_ASK" == "true" ]; then
         echo -e "${BLUE}here you can add additional IPs to the Allowlist file..."
@@ -2054,34 +2100,42 @@ FUNC_NGINX_CLEAR_RECREATE() {
         echo -e "${GREEN}## NGINX is already installed... ${NC}"
     fi
     
-    # delete default and old files, along with symbolic link file if it exists
-    echo "clearing old default config files..."
-    if [  -f $NGX_CONF_ENABLED/default ]; then
-        sudo rm -f $NGX_CONF_ENABLED/default
-    fi
-    if [  -f $NGX_CONF_NEW/default ]; then
-        sudo rm -f $NGX_CONF_NEW/default
-    fi
-    if [  -f $NGX_CONF_ENABLED/xahau ]; then
-        sudo rm -f $NGX_CONF_ENABLED/xahau
-    fi 
-    if [  -f $NGX_CONF_NEW/xahau ]; then
-        sudo rm -f $NGX_CONF_NEW/xahau
-    fi
+    # 
 
-    # re-create new nginx configuration file with the user-provided domain....
-    echo
-    echo -e "${GREEN}#########################################################################${NC}"
-    echo
-    echo -e "${GREEN}## ${YELLOW}Setup: Installing new Nginx configuration files ...${NC}"
-    echo 
+    if [ -z "$RECREATE_NGINX_FILES" ]; then
+        read -p "Do you want to (re)install the nginx configuration files?: true or false # " RECREATE_NGINX_FILES
+        sudo sed -i "s/^RECREATE_NGINX_FILES=.*/RECREATE_NGINX_FILES=\"$RECREATE_NGINX_FILES\"/" $SCRIPT_DIR/xahl_node.vars
+    fi
+    if [ ! -f "$NGX_CONF_NEW" ] || [ "$RECREATE_NGINX_FILES" == "true" ]; then
 
-    sudo touch $NGX_CONF_NEW/xahau
-    sudo chmod 666 $NGX_CONF_NEW/xahau
-    
-    if [ "$INSTALL_CERTBOT_SSL" == "true" ] && [ -f /etc/letsencrypt/live/$USER_DOMAIN/privkey.pem ]; then
-    echo -e "${GREEN}## ${YELLOW}Setup: previous SSL files found, installing SSL type .conf file... ${NC}"
-        sudo cat <<EOF > $NGX_CONF_NEW/xahau
+        # delete default and old files, along with symbolic link file if it exists
+        echo "clearing old default config files..."
+        if [  -f $NGX_CONF_ENABLED/default ]; then
+            sudo rm -f $NGX_CONF_ENABLED/default
+        fi
+        if [  -f $NGX_CONF_NEW/default ]; then
+            sudo rm -f $NGX_CONF_NEW/default
+        fi
+        if [  -f $NGX_CONF_ENABLED/xahau ]; then
+            sudo rm -f $NGX_CONF_ENABLED/xahau
+        fi 
+        if [  -f $NGX_CONF_NEW/xahau ]; then
+            sudo rm -f $NGX_CONF_NEW/xahau
+        fi
+
+        # re-create new nginx configuration file with the user-provided domain....
+        echo
+        echo -e "${GREEN}#########################################################################${NC}"
+        echo
+        echo -e "${GREEN}## ${YELLOW}Setup: Installing new Nginx configuration files ...${NC}"
+        echo 
+
+        sudo touch $NGX_CONF_NEW/xahau
+        sudo chmod 666 $NGX_CONF_NEW/xahau
+        
+        if [ "$INSTALL_CERTBOT_SSL" == "true" ] && [ -f /etc/letsencrypt/live/$USER_DOMAIN/privkey.pem ]; then
+        echo -e "${GREEN}## ${YELLOW}Setup: previous SSL files found, installing SSL type .conf file... ${NC}"
+            sudo cat <<EOF > $NGX_CONF_NEW/xahau
 set_real_ip_from $NGINX_PROXY_IP;
 real_ip_header X-Real-IP;
 real_ip_recursive on;
@@ -2102,7 +2156,7 @@ server {
 
     error_page 403 /custom_403.html;
     location /custom_403.html {
-        root /home/www/error;
+        root ${INSTALL_LANDINGPAGE_PATH}/error;
         internal;
     }
     
@@ -2129,13 +2183,13 @@ server {
                 proxy_pass http://localhost:$VARVAL_CHAIN_RPC;
         }
 
-        root /home/www;
+        root ${INSTALL_LANDINGPAGE_PATH};
     }
 
     location /.well-known/xahau.toml {
         allow all;
         try_files \$uri \$uri/ =403;
-        root /home/www;
+        root ${INSTALL_LANDINGPAGE_PATH};
     }
 
     location /uptime {
@@ -2202,9 +2256,9 @@ server {
 }
 EOF
 
-    else
-    echo -e "${GREEN}## ${YELLOW}Setup: installing non-SSL type .conf file... ${NC}"
-    sudo cat <<EOF > $NGX_CONF_NEW/xahau
+        else
+        echo -e "${GREEN}## ${YELLOW}Setup: installing non-SSL type .conf file... ${NC}"
+        sudo cat <<EOF > $NGX_CONF_NEW/xahau
 set_real_ip_from $NGINX_PROXY_IP;
 real_ip_header X-Real-IP;
 real_ip_recursive on;
@@ -2227,7 +2281,7 @@ server {
 
     error_page 403 /custom_403.html;
     location /custom_403.html {
-        root /home/www/error;
+        root ${INSTALL_LANDINGPAGE_PATH}/error;
         internal;
     }
     
@@ -2254,13 +2308,13 @@ server {
                 proxy_pass http://localhost:$VARVAL_CHAIN_RPC;
         }
 
-        root /home/www;
+        root ${INSTALL_LANDINGPAGE_PATH};
     }
 
     location /.well-known/xahau.toml {
         allow all;
         try_files \$uri \$uri/ =403;
-        root /home/www;
+        root ${INSTALL_LANDINGPAGE_PATH};
     }
 
     location /uptime {
@@ -2308,12 +2362,13 @@ server {
 
 }
 EOF
-    sudo chmod 644 $NGX_CONF_NEW
-    fi
+        sudo chmod 644 $NGX_CONF_NEW
+        fi
 
-    # check if symbolic link file exists in sites-enabled (it shouldn't), if not create it
-    if [ ! -f $NGX_CONF_ENABLED/xahau ]; then
-        sudo ln -s $NGX_CONF_NEW/xahau $NGX_CONF_ENABLED/xahau
+        # check if symbolic link file exists in sites-enabled (it shouldn't), if not create it
+        if [ ! -f $NGX_CONF_ENABLED/xahau ]; then
+            sudo ln -s $NGX_CONF_NEW/xahau $NGX_CONF_ENABLED/xahau
+        fi
     fi
 }
 
@@ -2331,8 +2386,7 @@ FUNC_LOGROTATE(){
     if [ -z "$NODE_CHAIN_NAME" ]; then
 
         while true; do
-         read -p "Enter which chain your node is deployed on (e.g. mainnet or testnet): " _input
-
+            read -p "Enter which chain your node is deployed on (e.g. mainnet or testnet): " _input
             case $_input in
                 testnet )
                     NODE_CHAIN_NAME="testnet"
@@ -2342,7 +2396,9 @@ FUNC_LOGROTATE(){
                     NODE_CHAIN_NAME="mainnet"
                     break
                     ;;
-                * ) echo "Please answer a valid option.";;
+                * )
+                    echo "Please answer with a valid option."
+                    ;;
             esac
         done
 

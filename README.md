@@ -63,23 +63,17 @@ read over the following sections and when ready simply copy and paste the code s
 
 ### Save your IP allow list
 
-older versions, where the allow list needed 2 blocks, saved in `/etc/nginx/sites-available/xahau` WILL need backing up FIRST, (as we now have a unified allowlist file instead)
+older versions, where the allow list needed 2 blocks, and was saved in `/etc/nginx/sites-available/xahau` are now captured,
 
-using this command, will allow you to access those, enabling you to save them else where, so you can re-input them later
+and used in the new method, using a separate file nginx_allowlist.conf , althou it is still good practice to backup FIRST.
 
-        sudo nano /etc/nginx/sites-available/xahau
+So this newer version of script, it will capture and save your allow list, it should show you them so you can be 100% that they are added.
 
-which opens them with the nano program, or alternatively if you have MANY to save, this method can be useful as this can make scrolling/copying easier,
+it will be after the "capturing any IPs from a previous old type install, ready for the new type" text,
 
-        sudo cat /etc/nginx/sites-available/xahau
+where it should then give you a confirmation of "found allow list from past install, will add these to the allowlist;" and list the found IPs
 
-now you can either write down your ip allow list manually, or copy and paste them into another notepad, 
-
-if you only have a few, you are able to enter these within the setup script, but this is one at a time,
-
-so if there are many, you can wait till after the setup has finished, and copy and paste them into the auto generated `nginx_allowlist.conf` file (using nano for example)
-
-remembering to issue the command `nginx -s reload` after you alter that file
+if not these can be added either manually (one at a time) at this point, or afterwards as a pasted in block to the file nginx_allowlist.conf
 
 ### only needs a single domain name
 
@@ -99,17 +93,19 @@ also, this ONE domain you use, will be the SAME domain you will then use in a br
 
 # OK so HOW do we Install
 
-simpliest method, in a suitable enviroment, like debian or ubuntu, with at leat 2GB of RAM, and 5GB of HDD space
+simplest method, in a suitable environment, like debian or ubuntu, with at least 2GB of RAM, and 5GB of HDD space
 
-copy, and run this ... 
+copy, and run this simple command... 
 
         sudo bash -c "$(wget -qLO - https://raw.githubusercontent.com/gadget78/xahl-node/main/setup.sh)"
 
-setup will go through a serious of questions (in blue) and output all info along the way
+(if you want to force a different script install directory, prefix with `SCRIPT_DIR="/new/path/here"` if not default will be "$HOME"/xahl-node)
+
+setup will go through a series of questions (in blue) and output all info along the way
 
 one of the questions, for example, is to enter IPs that will form a "allow list" which you do one at a time, once finished, submit a blank entry to move on.
 
-when setup is finished asking questions, and outputing progress, it will give a little info, on how to check its working etc,
+when setup is finished asking questions, and outputting progress, it will give a some info on how to check its working with the IP or URls that now in use.
 
 also shows you where the new `nginx_allowlist.conf` file is. just in case you need to enter more in future (where you will need to issue command `nginx -s reload` after any edits)
 
@@ -124,11 +120,13 @@ is to clone this repo, by doing these steps INSTEAD of the above...
         cd xahl-node
         chmod +x *.sh
 
-adjusting .vars file with `node xahl_node.vars` if needed. (see below for more details)
+adjusting .vars file with `node xahl_node.vars` if needed.
 
-now install with;
+now install with
 
         `sudo ./setup.sh`
+
+(if you want to force a different script install directory, prefix with `SCRIPT_DIR="/new/path/here"` if not default will be "$HOME"/xahl-node)
 
 ### config files
 
@@ -145,18 +143,18 @@ there are MANY things that can be adjusted, the main ones are;
 - `ALWAYS_ASK` - "true" true setting will force asking of questions, false will only ask questions if value is not set (in .vars or .env file) useful for re-generate files/setting
 - `INSTALL_UPDATES` - "true" this setting can be used to turn off the checking/installing of linux updates, and default install packages
 - `VARVAL_CHAIN_NAME` - "mainnet" this is the main "mode" of setup, either mainnet, or testnet
-- `INSTALL_UFW` - "true" chose to install or not (in enviroments that do not have UFW installed in as standard)
+- `INSTALL_UFW` - "true" chose to install or not (in environments that do not have UFW installed in as standard)
 - `INSTALL_CERTBOT_SSL` - "true" VERY useful if you need SSL to be handled upstream, like Nginx Proxy Manager for example.
 - `INSTALL_LANDINGPAGE` - "true" so you can switch off the landing page generation, if you have editing default one.
 - `INSTALL_TOML` - "true" so you can switch of .toml file generation, if you have manually edited it
 
 #### .env file
 
-all the questions asked in setup, are saved in file called `.env` this is so they dont get altered by updateding the repo (git pull)
+all the questions asked in setup, are saved in file called `.env` this is so they do not get altered by updating the repo (git pull)
 
 - `USER_DOMAIN` - your server domain.
 - `CERT_EMAIL` - email address for certificate renewals etc.
-- `TOML_EMAIL` - email address for the PUBBLIC .toml file.
+- `TOML_EMAIL` - email address for the PUBLIC .toml file.
 - `XAHAU_NODE_SIZE` - allows you to state the "size" of the node, this will change the amount of RAM, and HDD thats used.
 
 ---
@@ -173,7 +171,7 @@ it can work behind another proxy instance, you may need to adjust the NGINX_PROX
 
 # Node IP Permissions
 
-the setup script adds 3 IPs by default to the nginx_allowlist.conf file, these are, the detected SSH IP, the external nodes IP, and the local enviroment IP.
+the setup script adds 3 IPs by default to the nginx_allowlist.conf file, these are, the detected SSH IP, the external nodes IP, and the local environment IP.
 
 In order to add/remove access to your node, you adjust the addresses within the `nginx_allowlist.conf` file
 
@@ -212,7 +210,7 @@ or following these next examples, you can test other aspects of it manually...
 
 ### Local XAHAUD
 
-this option ONLY works LOCALLY on the xahau node, and is directly quering the node itself (type in the terminal;
+this option ONLY works LOCALLY on the xahau node, and is directly querying the node itself, type in the terminal;
 
         xahaud server_info
 
@@ -272,7 +270,7 @@ from version 0.88, you can simply type
 
 within the terminal to update... 
 
-any other version you can use the install method from here [OK so HOW do we Install ?](#ok-so-how-do-we-install-?)
+for older versions or if `update` doesn't work, you can use the one line command method from here [OK so HOW do we Install ?](#ok-so-how-do-we-install-?)
 
 #### Old way
 
@@ -282,13 +280,13 @@ apply repo updates to your local clone,
 
         cd ~/xahl-node
 
-which changes your working directory to the directry where you cloned repo last time
+which changes your working directory to the directory where you cloned repo last time
 
         git pull
 
 checks for new repo updates, and pulls new updates if there is any.
 
-if you HAVE chnaged the .vars file, you wll need to perferm a "stash" that override those setting.. 
+if you HAVE changed the .vars file, you wll need to perform a "stash" that override those setting.. 
 
         git stash
 
