@@ -1969,7 +1969,7 @@ EOF
         
         echo -e "${GREEN}## ${YELLOW}Setup: adjusting .toml updater to local .vars settngs${NC}"
         sudo sed -i "s|^\(toml_path = \).*|\1'$INSTALL_TOML_FILE'|" "$SCRIPT_DIR/toml_updater.py"
-        sudo sed -i "s|^\(node_config_path = \).*|\1'$NGINX_CONF_FILE'|" "$SCRIPT_DIR/toml_updater.py"
+        sudo sed -i "s|^\(node_config_path = \).*|\1'$NODE_CONFIG_FILE'|" "$SCRIPT_DIR/toml_updater.py"
         sudo sed -i "s|^\(allowlist_path = \).*|\1'${SCRIPT_DIR}/${NGINX_ALLOWLIST_FILE}'|" "$SCRIPT_DIR/toml_updater.py"
         sudo sed -i "s|^\(websocket_port = \).*|\1'$NGX_MAINNET_WSS'|" "$SCRIPT_DIR/toml_updater.py"
 
@@ -2022,20 +2022,20 @@ FUNC_ALLOWLIST_CHECK(){
 
     echo "adding default IPs..."
     echo
-    if ! grep -q "allow $SSH_IP;  # Detected IP of the SSH session" "$SCRIPT_DIR/nginx_allowlist.conf"; then
-        echo "allow $SSH_IP;  # Detected IP of the SSH session" >> $SCRIPT_DIR/nginx_allowlist.conf
+    if ! grep -q "allow $SSH_IP;  # Detected IP of the SSH session" "$SCRIPT_DIR/$NGINX_ALLOWLIST_FILE"; then
+        echo "allow $SSH_IP;  # Detected IP of the SSH session" >> $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE
         echo "added IP $SSH_IP;  # Detected IP of the SSH session"
     else
         echo "SSH session IP, $SSH_IP, already in list."
     fi
-    if ! grep -q "allow $LOCAL_IP; # Local IP of server" "$SCRIPT_DIR/nginx_allowlist.conf"; then
-        echo "allow $LOCAL_IP; # Local IP of server" >> $SCRIPT_DIR/nginx_allowlist.conf
+    if ! grep -q "allow $LOCAL_IP; # Local IP of server" "$SCRIPT_DIR/$NGINX_ALLOWLIST_FILE"; then
+        echo "allow $LOCAL_IP; # Local IP of server" >> $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE
         echo "added IP $LOCAL_IP; # Local IP of the server"
     else
         echo "Local IP of the server, $LOCAL_IP, already in list."
     fi
-    if ! grep -q "allow $NODE_IP;  # ExternalIP of the Node itself" "$SCRIPT_DIR/nginx_allowlist.conf"; then
-        echo "allow $NODE_IP;  # ExternalIP of the Node itself" >> $SCRIPT_DIR/nginx_allowlist.conf
+    if ! grep -q "allow $NODE_IP;  # ExternalIP of the Node itself" "$SCRIPT_DIR/$NGINX_ALLOWLIST_FILE"; then
+        echo "allow $NODE_IP;  # ExternalIP of the Node itself" >> $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE
         echo "added IP $NODE_IP;  # ExternalIP of the Node itself"
     else
         echo "External IP of the Node itself, $NODE_IP, already in list."
@@ -2047,10 +2047,13 @@ FUNC_ALLOWLIST_CHECK(){
     if [ -n "$OLD_ALLOWLIST" ]; then
         msg_ok "found allow list from past install, will add these to the allowlist;"
         echo "$OLD_ALLOWLIST"
-        echo "$OLD_ALLOWLIST" >> $SCRIPT_DIR/nginx_allowlist.conf
+        echo "$OLD_ALLOWLIST" >> $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE
     else
         echo "none found."
     fi
+
+    echo
+    echo "Total IPs currently in the allowlist file is, $(grep -c "allow" $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE)"
 
     echo
     if [ "$ALWAYS_ASK" == "true" ]; then
@@ -2071,7 +2074,7 @@ FUNC_ALLOWLIST_CHECK(){
             # Check if the input matches either the IPv4 or IPv6 pattern
             if [[ $user_ip =~ $ipv4_regex ]] || [[ $user_ip =~ $ipv6_regex ]]; then
                 echo -e "${GREEN}IP address: ${YELLOW}$user_ip added to Allow list. ${NC}"
-                echo -e "allow $user_ip;" >> $SCRIPT_DIR/nginx_allowlist.conf
+                echo -e "allow $user_ip;" >> $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE
             else
                 if [ -z "$user_ip" ]; then
                     break
