@@ -1,5 +1,5 @@
 #!/bin/bash
-version=0.97
+version=0.98
 
 ###################################################################################
 # setup message, variables, and functions for script.
@@ -551,8 +551,8 @@ FUNC_CLONE_NODE_SETUP(){
     fi
 
     if [ "$NODE_TYPE" == "validator" ] || [ "$NODE_TYPE" == "validatorHistory" ]; then
-        if [[ -f "/opt/xahaud/etc/xahaud.cfg" ]]; then
-            NODE_VALIDATOR_TOKEN=$(sed -n '/^\[validator_token\]/,/^$/ {/^$/q; /^\[validator_token\]/!{/^$/!p}}' /opt/xahaud/etc/xahaud.cfg)
+        if [[ -f "$NODE_CONFIG_FILE" ]]; then
+            NODE_VALIDATOR_TOKEN=$(sed -n '/^\[validator_token\]/,/^$/ {/^$/q; /^\[validator_token\]/!{/^$/!p}}' $NODE_CONFIG_FILE)
         fi
         if [ -n "$NODE_VALIDATOR_TOKEN" ] && echo "$NODE_VALIDATOR_TOKEN" | grep -q '[^[:space:]]'; then
             echo "found validator_token, $NODE_VALIDATOR_TOKEN"
@@ -614,9 +614,9 @@ FUNC_CLONE_NODE_SETUP(){
     cd $SCRIPT_DIR/$VARVAL_CHAIN_REPO
     sudo ./xahaud-install-update.sh
 
-    if [[ ! -f "/opt/xahaud/etc/xahaud.cfg" ]] || [ "$RECREATE_XAHAU_FILES" == "true" ]; then
+    if [[ ! -f "$NODE_CONFIG_FILE" ]] || [ "$RECREATE_XAHAU_FILES" == "true" ]; then
 
-        sudo rm -f /opt/xahaud/etc/xahaud.cfg > /dev/null
+        sudo rm -f $NODE_CONFIG_FILE > /dev/null
         sudo rm -f -r /opt/xahaud/db > /dev/null
         if [[ "$NODE_TYPE" == "nodeHistory" || "$NODE_TYPE" == "validatorHistory" ]]; then 
             echo
@@ -642,7 +642,7 @@ FUNC_CLONE_NODE_SETUP(){
             NODE_DB_RELATIONAL="backend=rwdb"
         fi
 
-sudo cat <<EOF > /opt/xahaud/etc/xahaud.cfg
+sudo cat <<EOF > $NODE_CONFIG_FILE
 [peers_max]
 $NODE_PEERS
 
@@ -739,14 +739,14 @@ owner_reserve = 200000
 EOF
 
         if [ "$NODE_TYPE" == "validator" ] || [ "$NODE_TYPE" == "validatorHistory" ]; then
-            echo "[validator_token]" >> /opt/xahaud/etc/xahaud.cfg
-            echo "$NODE_VALIDATOR_TOKEN" >> /opt/xahaud/etc/xahaud.cfg
+            echo "[validator_token]" >> $NODE_CONFIG_FILE
+            echo "$NODE_VALIDATOR_TOKEN" >> $NODE_CONFIG_FILE
         fi
 
         if [  "$IPv6" == "true" ]; then
             echo -e "${YELLOW}applying IPv6 changes to xahaud.cfg file.${NC}"
-            sudo sed -i "s/0.0.0.0/::/g" /opt/xahaud/etc/xahaud.cfg
-            sudo sed -i "s/127.0.0.1/::1/g" /opt/xahaud/etc/xahaud.cfg
+            sudo sed -i "s/0.0.0.0/::/g" $NODE_CONFIG_FILE
+            sudo sed -i "s/127.0.0.1/::1/g" $NODE_CONFIG_FILE
         fi
     fi
 
@@ -862,7 +862,7 @@ EOF
             echo "$existing_crontab" | crontab -
             msg_ok "Auto Updater, updated cron tab tasks, system will now check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours"
         else
-            (sudo crontab -l 2>&1 | grep -v -E "^no crontab for|^sudo:" || true; echo "$cron_job") | sudo crontab -
+            (sudo crontab -l 2>&1 | { grep -v -E "^no crontab for|^sudo:" || true; } | echo "$cron_job") | sudo crontab -
             msg_ok "Auto Updater, added new entry to cron tab tasks, system will check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours"
         fi
     else
@@ -2109,7 +2109,7 @@ FUNC_NGINX_CLEAR_RECREATE() {
         read -p "Do you want to (re)install the nginx configuration files?: true or false # " RECREATE_NGINX_FILES
         sudo sed -i "s/^RECREATE_NGINX_FILES=.*/RECREATE_NGINX_FILES=\"$RECREATE_NGINX_FILES\"/" $SCRIPT_DIR/xahl_node.vars
     fi
-    if [ ! -f "$NGX_CONF_NEW" ] || [ "$RECREATE_NGINX_FILES" == "true" ]; then
+    if [ ! -f "$NGX_CONF_NEW/xahau" ] || [ "$RECREATE_NGINX_FILES" == "true" ]; then
 
         # delete default and old files, along with symbolic link file if it exists
         echo "clearing old default config files..."
@@ -2372,6 +2372,8 @@ EOF
         if [ ! -f $NGX_CONF_ENABLED/xahau ]; then
             sudo ln -s $NGX_CONF_NEW/xahau $NGX_CONF_ENABLED/xahau
         fi
+    else
+        echo -e "${GREEN}## NGINX re-create skipped due to .vars config. ${NC}"
     fi
 }
 
