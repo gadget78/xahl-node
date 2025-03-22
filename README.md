@@ -24,6 +24,7 @@ and supplements it with the necessary configuration to provide a TLS secured RPC
       - [RPC and API](#rpc-and-api)
       - [Websocket](#websocket)
     - [Future updates](#future-updates)
+      - [auto updater](#auto-updater)
     - [Contributors:](#contributors)
     - [Feedback](#feedback)
 
@@ -142,11 +143,13 @@ there are MANY things that can be adjusted, the main ones are;
 
 - `ALWAYS_ASK` - "true" true setting will force asking of questions, false will only ask questions if value is not set (in .vars or .env file) useful for re-generate files/setting
 - `INSTALL_UPDATES` - "true" this setting can be used to turn off the checking/installing of linux updates, and default install packages
-- `VARVAL_CHAIN_NAME` - "mainnet" this is the main "mode" of setup, either mainnet, or testnet
+- `VARVAL_CHAIN_NAME` - "mainnet" this is the main "mode" of setup, can be either mainnet, or testnet
 - `INSTALL_UFW` - "true" chose to install or not (in environments that do not have UFW installed in as standard)
 - `INSTALL_CERTBOT_SSL` - "true" VERY useful if you need SSL to be handled upstream, like Nginx Proxy Manager for example.
 - `INSTALL_LANDINGPAGE` - "true" so you can switch off the landing page generation, if you have editing default one.
 - `INSTALL_TOML` - "true" so you can switch of .toml file generation, if you have manually edited it
+- `RECREATE_NGINX_FILES` - "true" this will recreate the nginx files, updating and fixing any issues
+- `RECREATE_XAHAU_FILES` - "true" this will recreate all xahau files (xahaud.cfg, and validators-xahau.txt files), updating and fixing issues
 
 #### .env file
 
@@ -155,7 +158,7 @@ all the questions asked in setup, are saved in file called `.env` this is so the
 - `USER_DOMAIN` - your server domain.
 - `CERT_EMAIL` - email address for certificate renewals etc.
 - `TOML_EMAIL` - email address for the PUBLIC .toml file.
-- `XAHAU_NODE_SIZE` - allows you to state the "size" of the node, this will change the amount of RAM, and HDD thats used.
+- `NODE_TYPE` - saves you node type.
 
 ---
 
@@ -261,6 +264,12 @@ which will return you xah node server info
 ---
 
 # Future Updates
+
+#### Auto updater
+
+this now includes a "auto-updater" which will check (by default) every 24 hours
+
+for a new binary release, and install and restart, if needed
 
 #### New way
 

@@ -1,8 +1,8 @@
 #!/bin/bash
-version=0.98
+version=0.99
 
 ###################################################################################
-# setup message, variables, and functions for script.
+# setup color, message, variables, and functions for script.
 # 
 
 # Set Color Vars
@@ -60,7 +60,7 @@ msg_ok() {
     if [[ -t 1 ]]; then printf "\e[?25h"; fi # Show cursor
   fi
   local msg="$1"
-  printf "%b" "${BFR} ${CM} ${GN}${msg}${CL}\n"
+  printf "%b" "${BFR} ${CM} ${DGN}${msg}${CL}\n"
 }
 export -f msg_ok
 
@@ -139,43 +139,43 @@ fi
 
 ###################################################################################
 # Authenticate sudo permissions, and extend time out before script execution to avoid timeouts or errors.
-
-msg_info "checking privileges..."
-if ! command -v sudo &> /dev/null; then
-    msg_error "sudo is not installed. Please install sudo and rerun the script. (to install sudo, you will need to be logged in as root user, then run this command \"apt update && apt install sudo -y\" )"
-    exit 1
-fi
-
-if [ "$(id -u)" -eq 0 ]; then
-    msg_ok "Privileges checked, user /"${USER_ID}/" has sudo privileges, continuing to install in directory $SCRIPT_DIR${CL}"
-
-elif sudo -l > /dev/null 2>&1; then
-
-    TIMEOUT=120  # Timeout in minutes
-
-    # Validate and apply sudoers timeout update
-    echo "Defaults:$USER_ID timestamp_timeout=$TIMEOUT" > "${TEMP_DIR}/node_setup"
-    if visudo -cf "${TEMP_DIR}/node_setup" >/dev/null 2>&1; then
-        sudo cp "${TEMP_DIR}/node_setup" /etc/sudoers.d/node_setup
-        msg_ok "${USER_ID} logged in, root privileges obtained, and timeout extended to $TIMEOUT minutes."
-    else
-        msg_error "${USER_ID} logged in, but an error occurred setting up sudoers configuration to extend timeout. Aborting."
-        sudo rm -f "${TEMP_DIR}/node_setup"
+FUNC_CHECK_PRIVILEGES(){
+    msg_info "checking privileges..."
+    if ! command -v sudo &> /dev/null; then
+        msg_error "sudo is not installed. Please install sudo and rerun the script. (to install sudo, you will need to be logged in as root user, then run this command \"apt update && apt install sudo -y\" )"
         exit 1
     fi
-    sudo rm -f "${TEMP_DIR}/node_setup"
 
-else
-    msg_error "This script requires root or sudo privileges."
-    exit 1
-fi
+    if [ "$(id -u)" -eq 0 ]; then
+        msg_ok "Privileges checked, user ${GN}/"${USER_ID}/"${DGN} has sudo privileges, continuing to install in directory ${GN}$SCRIPT_DIR${CL}"
 
+    elif sudo -l > /dev/null 2>&1; then
 
+        TIMEOUT=120  # Timeout in minutes
+
+        # Validate and apply sudoers timeout update
+        echo "Defaults:$USER_ID timestamp_timeout=$TIMEOUT" > "${TEMP_DIR}/node_setup"
+        if visudo -cf "${TEMP_DIR}/node_setup" >/dev/null 2>&1; then
+            sudo cp "${TEMP_DIR}/node_setup" /etc/sudoers.d/node_setup
+            msg_ok "${USER_ID} logged in, root privileges obtained, and timeout extended to $TIMEOUT minutes, ready to install in directory $SCRIPT_DIR"
+        else
+            msg_error "${USER_ID} logged in, but an error occurred setting up sudoers configuration to extend timeout. Aborting."
+            sudo rm -f "${TEMP_DIR}/node_setup"
+            exit 1
+        fi
+        sudo rm -f "${TEMP_DIR}/node_setup"
+
+    else
+        msg_error "This script requires root or sudo privileges."
+        exit 1
+    fi
+
+}
 
 # Check for the .var file, if not present, generate a default one
 FUNC_VARS_VARIABLE_CHECK(){
 if [  ! -f $SCRIPT_DIR/xahl_node.vars ]; then
-    echo -e "$SCRIPT_DIR/xahl_node.vars file missing, generating a new one...${NC}"
+    msg_info "$SCRIPT_DIR/xahl_node.vars file missing, generating a new one..."
     mkdir -p $SCRIPT_DIR
     sudo cat <<EOF > $SCRIPT_DIR/xahl_node.vars
 vars_version="$version"
@@ -261,11 +261,11 @@ source $SCRIPT_DIR/.env
 # check and update old .vars file if it already exists
 if [ -z "${vars_version:-}" ] || [ "$vars_version" == "0.8.6" ] || [ "$vars_version" == "0.8.7" ] || [ "$vars_version" == "0.8.8" ]; then
     vars_version=0.89
-    echo -e "${GREEN}## ${YELLOW}old version of xahl-node.vars found... ${NC}"
+    msg_info "old version of xahl-node.vars found... "
 fi
 
 if echo "${vars_version:-}" | awk '{ exit !($1 < 0.97) }'; then
-    echo -e "${GREEN}## ${YELLOW}xahl_node.vars file needs updating, importing old variables...${NC}"
+    msg_info "xahl_node.vars file needs updating, will import old variables..."
     sudo rm -f $SCRIPT_DIR/xahl_node.vars
     sudo cat <<EOF > $SCRIPT_DIR/xahl_node.vars
 vars_version="$version"
@@ -340,9 +340,9 @@ UPDATE_SCRIPT_PATH="${UPDATE_SCRIPT_PATH:-/usr/local/bin/\$UPDATE_SCRIPT_NAME}"
 LOG_DIR="${LOG_DIR:-/opt/xahaud/log}"
 LOG_FILE="${LOG_FILE:-\$LOG_DIR/update.log}"
 EOF
-    msg_ok "xahl_node.vars file updated"
+    msg_ok "xahl_node.vars file updated to ${vars_version}."
 else
-    msg_ok "xahl_node.vars file version checks ok."
+    msg_ok "xahl_node.vars file version is ${vars_version}. all checks complete."
 fi
 
 source $SCRIPT_DIR/xahl_node.vars
@@ -350,13 +350,10 @@ source $SCRIPT_DIR/.env
 }
 
 
-######## start of Functions
-
+# check for updates, upgrades, and install all sys packages listed
 FUNC_PKG_CHECK(){
     echo
-    echo -e "${GREEN}#########################################################################${NC}"
-    echo
-    echo -e "${GREEN}## Check/install necessary updates, and Packages... ${NC}"
+    echo -e "${GREEN}## Check and install any necessary updates and upgrades, then cycling through Package dependencies... ${NC}"
     echo     
 
     # update and upgrade the system
@@ -372,8 +369,6 @@ FUNC_PKG_CHECK(){
         sudo apt upgrade -y 2>&1 | awk '{ printf "\r\033[K   checking upgrades.. "; printf "%s", $0; fflush() }'
         msg_ok "all upgrades finished"
         echo
-
-        echo -e "${GREEN}## cycle through packages in vars file, and install... ${NC}"
         for a in "${SYS_PACKAGES[@]}"
         do
             if ! command -v $a &> /dev/null; then
@@ -389,30 +384,58 @@ FUNC_PKG_CHECK(){
     else
         echo -e "${GREEN}## ${YELLOW}INSTALL_SYS_PACKAGES set to false in var files, skipping... ${NC}"
     fi
-    echo 
-    echo -e "${GREEN}#########################################################################${NC}"
     echo
-    sleep 2s
+
 }
 
-FUNC_IPV6_CHECK(){
-    if [ "$IPv6" != "false" ]; then
-        if ! ping -c 1 -4 github.com &> /dev/null && ip a | grep -q 'inet6.*::1/128'; then
-            echo -e "${YELLOW}IPv6 environment detected, checking hosts file.${NC}"
-            IPv6="true"
-            if ! grep -q "github" /etc/hosts; then
-                echo '2001:67c:27e4:1064::140.82.121.3 github.com www.github.com' | sudo tee -a /etc/hosts
-                echo -e "${YELLOW}Updated hosts file.${NC}"
-            fi
-        elif [ "$IPv6" == "true" ]; then
-            echo -e "${YELLOW}IPv6 environment being forced by .var file, checking hosts file.${NC}"
-            if ! grep -q "github" /etc/hosts; then
-                echo '2001:67c:27e4:1064::140.82.121.3 github.com www.github.com' | sudo tee -a /etc/hosts
-                echo -e "${YELLOW}Updated hosts file.${NC}"
-            fi
+FUNC_CERTBOT_PRECHECK(){
+    if [ -z "$INSTALL_CERTBOT_SSL" ]; then
+        read -e -p "Do you want to use install CERTBOT and use SSL? : true or false # " INSTALL_CERTBOT_SSL
+        sudo sed -i "s/^INSTALL_CERTBOT_SSL=.*/INSTALL_CERTBOT_SSL=\"$INSTALL_CERTBOT_SSL\"/" $SCRIPT_DIR/xahl_node.vars
+    fi
+    if [ "$INSTALL_CERTBOT_SSL" != "true" ]; then
+        echo -e "${GREEN}## ${YELLOW}INSTALL_CERTBOT_SSL in .vars file set to Skip CERTBOT install... ${NC}"
+        echo
+        echo -e "${GREEN}#########################################################################${NC}"
+        echo
+        return
+    fi
+
+    # Install Let's Encrypt Certbot
+    msg_info "installing certbot..."
+    sudo apt-get update >/dev/null 2>&1
+    sudo apt-get install certbot python3-certbot-nginx -y 2>&1 | awk '{ printf "\r\033[K   installing certbot.. "; printf "%s", $0; fflush() }'
+    msg_ok "certbot installed."
+    echo
+    echo -e "${GREEN}#########################################################################${NC}"
+    echo
+    sleep 1s
+
+}
+
+
+FUNC_PROMPTS_4_DOMAINS_EMAILS() {
+    if [ -z "${USER_DOMAIN-}" ] || [ "$ALWAYS_ASK" == "true" ]; then
+        printf "${BLUE}Enter your servers domain (e.g. mydomain.com or a subdomain like xahau.mydomain.com )${NC} # "
+        read -e -i "${USER_DOMAIN-}" USER_DOMAIN
+        if sudo grep -q 'USER_DOMAIN=' "$SCRIPT_DIR/.env"; then
+            sudo sed -i "s/^USER_DOMAIN=.*/USER_DOMAIN=\"$USER_DOMAIN\"/" "$SCRIPT_DIR/.env"
         else
-            echo -e "${YELLOW}Not an exclusive IPv6 enviroment.${NC}"
+            sudo echo -e "USER_DOMAIN=\"$USER_DOMAIN\"" >> $SCRIPT_DIR/.env
         fi
+    fi
+
+    # Prompt for CERT email if not provided as a variable
+    if [ -z "${CERT_EMAIL-}" ] || [ "$ALWAYS_ASK" == "true" ] || [ "$INSTALL_CERTBOT_SSL" == "true" ]; then
+        echo
+        printf "${BLUE}Enter your email address for certbot updates ${NC}# "
+        read -e -i "${CERT_EMAIL-}" CERT_EMAIL
+        if sudo grep -q 'CERT_EMAIL=' "$SCRIPT_DIR/.env"; then
+            sudo sed -i "s/^CERT_EMAIL=.*/CERT_EMAIL=\"$CERT_EMAIL\"/" "$SCRIPT_DIR/.env"
+        else
+            sudo echo -e "CERT_EMAIL=\"$CERT_EMAIL\"" >> $SCRIPT_DIR/.env
+        fi
+        echo
     fi
 }
 
@@ -444,14 +467,14 @@ FUNC_SETUP_MODE(){
     fi
 
     if [ "$NODE_CHAIN_NAME" == "mainnet" ]; then
-        echo -e "${GREEN}### Configuring node for ${BYELLOW}Xahau $NODE_CHAIN_NAME${GREEN}... ${NC}"
+        echo -e "${GREEN}## Configuring node for ${BYELLOW}Xahau $NODE_CHAIN_NAME${GREEN}... ${NC}"
         VARVAL_CHAIN_RPC=$NGX_MAINNET_RPC
         VARVAL_CHAIN_WSS=$NGX_MAINNET_WSS
         VARVAL_CHAIN_REPO="mainnet-docker"
         VARVAL_CHAIN_PEER=$XAHL_MAINNET_PEER
 
     elif [ "$NODE_CHAIN_NAME" == "testnet" ]; then
-        echo -e "${GREEN}### Configuring node for ${BYELLOW}Xahau $NODE_CHAIN_NAME${GREEN}... ${NC}"
+        echo -e "${GREEN}## Configuring node for ${BYELLOW}Xahau $NODE_CHAIN_NAME${GREEN}... ${NC}"
         VARVAL_CHAIN_RPC=$NGX_TESTNET_RPC
         VARVAL_CHAIN_WSS=$NGX_TESTNET_WSS
         VARVAL_CHAIN_REPO="Xahau-Testnet-Docker"
@@ -463,9 +486,124 @@ FUNC_SETUP_MODE(){
     echo -e "Local Node RPC port is :${BYELLOW} $VARVAL_CHAIN_RPC ${NC}"
     echo -e "Local WSS port is :${BYELLOW} $VARVAL_CHAIN_WSS ${NC}"
     echo
+}
+
+
+FUNC_IPV6_CHECK(){
+    if [ "$IPv6" != "false" ]; then
+        if ! ping -c 1 -4 github.com &> /dev/null && ip a | grep -q 'inet6.*::1/128'; then
+            echo -e "${YELLOW}IPv6 environment detected, checking hosts file.${NC}"
+            IPv6="true"
+            if ! grep -q "github" /etc/hosts; then
+                echo '2001:67c:27e4:1064::140.82.121.3 github.com www.github.com' | sudo tee -a /etc/hosts
+                echo -e "${YELLOW}Updated hosts file.${NC}"
+            fi
+        elif [ "$IPv6" == "true" ]; then
+            echo -e "${YELLOW}IPv6 environment being forced by .var file, checking hosts file.${NC}"
+            if ! grep -q "github" /etc/hosts; then
+                echo '2001:67c:27e4:1064::140.82.121.3 github.com www.github.com' | sudo tee -a /etc/hosts
+                echo -e "${YELLOW}Updated hosts file.${NC}"
+            fi
+        else
+            echo -e "${YELLOW}Not an exclusive IPv6 enviroment.${NC}"
+        fi
+    fi
+}
+
+FUNC_ALLOWLIST_CHECK(){
+    echo
     echo -e "${GREEN}#########################################################################${NC}"
     echo
+    echo -e "${GREEN}## ${YELLOW}Setup: checking/setting up IPs in ${BYELLOW}'$SCRIPT_DIR/$NGINX_ALLOWLIST_FILE'${NC} file...${NC}"
+    echo
+
+    # Get some source IPs
+    #current SSH session
+    if [[ -n "${SSH_CONNECTION-}" ]]; then
+        SSH_IP=$(echo $SSH_CONNECTION | awk '{print $1}')
+    else
+        SSH_IP="127.0.0.1"
+    fi
+    #this Nodes IP
+    NODE_IP=$(curl -s ipinfo.io/ip)
+    if [ -z "$NODE_IP" ]; then
+        NODE_IP="127.0.0.1"
+    fi
+    #dockers IP
+    #DCKR_HOST_IP=$(sudo docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $NODE_CHAIN_NAME_xinfinnetwork_1)
+    LOCAL_IP=$(hostname -I | awk '{print $1}')
+    if [ -z "$LOCAL_IP" ]; then
+        LOCAL_IP="127.0.0.1"
+    fi
+
+    echo "adding default IPs..."
+    echo
+    if ! grep -q "allow $SSH_IP;  # Detected IP of the SSH session" "$SCRIPT_DIR/$NGINX_ALLOWLIST_FILE"; then
+        echo "allow $SSH_IP;  # Detected IP of the SSH session" >> $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE
+        echo "added IP $SSH_IP;  # Detected IP of the SSH session"
+    else
+        echo "SSH session IP, $SSH_IP, already in list."
+    fi
+    if ! grep -q "allow $LOCAL_IP; # Local IP of server" "$SCRIPT_DIR/$NGINX_ALLOWLIST_FILE"; then
+        echo "allow $LOCAL_IP; # Local IP of server" >> $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE
+        echo "added IP $LOCAL_IP; # Local IP of the server"
+    else
+        echo "Local IP of the server, $LOCAL_IP, already in list."
+    fi
+    if ! grep -q "allow $NODE_IP;  # ExternalIP of the Node itself" "$SCRIPT_DIR/$NGINX_ALLOWLIST_FILE"; then
+        echo "allow $NODE_IP;  # ExternalIP of the Node itself" >> $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE
+        echo "added IP $NODE_IP;  # ExternalIP of the Node itself"
+    else
+        echo "External IP of the Node itself, $NODE_IP, already in list."
+    fi
+    echo
+
+    echo "capturing any IPs from a previous old type install, ready for the new type.."
+    OLD_ALLOWLIST=$(sed -n '/location \/ {/,/}/p' /etc/nginx/sites-available/xahau | grep -E --color=never 'allow [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+;' | sed 's/^[[:space:]]*//' || true)
+    if [ -n "$OLD_ALLOWLIST" ]; then
+        msg_ok "found allow list from past install, will add these to the allowlist;"
+        echo "$OLD_ALLOWLIST"
+        echo "$OLD_ALLOWLIST" >> $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE
+    else
+        echo "none found."
+    fi
+
+    echo
+    echo "Total IPs currently in the allowlist file is, $(grep -c "allow" $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE)"
+
+    echo
+    if [ "$ALWAYS_ASK" == "true" ]; then
+        echo -e "${BLUE}here you can add additional IPs to the Allowlist file..."
+        echo -e "if you want to disable the whitelist feature, add ip 0.0.0.0 ${NC}"
+        echo
+        while true; do
+            printf "${BLUE}Enter additional IP address (one at a time for example 10.0.0.20, or just press enter to skip) ${NC}# " 
+            read -e user_ip
+
+            # Validate the input using regex
+            # IPv4 regex
+            ipv4_regex='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+
+            # IPv6 regex
+            ipv6_regex='^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$'
+
+            # Check if the input matches either the IPv4 or IPv6 pattern
+            if [[ $user_ip =~ $ipv4_regex ]] || [[ $user_ip =~ $ipv6_regex ]]; then
+                echo -e "${GREEN}IP address: ${YELLOW}$user_ip added to Allow list. ${NC}"
+                echo -e "allow $user_ip;" >> $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE
+            else
+                if [ -z "$user_ip" ]; then
+                    break
+                else
+                    echo -e "${RED}Invalid IP address. Please try again. ${NC}"
+                fi
+            fi
+        done
+    fi
+    echo
+    sleep 2s
 }
+
 
 FUNC_CLONE_NODE_SETUP(){
     echo
@@ -553,6 +691,7 @@ FUNC_CLONE_NODE_SETUP(){
     if [ "$NODE_TYPE" == "validator" ] || [ "$NODE_TYPE" == "validatorHistory" ]; then
         if [[ -f "$NODE_CONFIG_FILE" ]]; then
             NODE_VALIDATOR_TOKEN=$(sed -n '/^\[validator_token\]/,/^$/ {/^$/q; /^\[validator_token\]/!{/^$/!p}}' $NODE_CONFIG_FILE)
+            NODE_IPS_FIXED=$(sed -n '/^\[ips_fixed\]/,/^$/ {/^$/q; /^\[ips_fixed\]/!{/^$/!p}}' $NODE_CONFIG_FILE)
         fi
         if [ -n "$NODE_VALIDATOR_TOKEN" ] && echo "$NODE_VALIDATOR_TOKEN" | grep -q '[^[:space:]]'; then
             echo "found validator_token, $NODE_VALIDATOR_TOKEN"
@@ -611,11 +750,28 @@ FUNC_CLONE_NODE_SETUP(){
         sudo systemctl stop xahaud
     fi
 
+    if [ "$RECREATE_XAHAU_FILES" == "true" ] && [ -n "$NODE_CONFIG_FILE" ]; then sudo rm -f $(dirname "$NODE_CONFIG_FILE")/*.* > /dev/null; fi
     cd $SCRIPT_DIR/$VARVAL_CHAIN_REPO
     sudo ./xahaud-install-update.sh
 
-    if [[ ! -f "$NODE_CONFIG_FILE" ]] || [ "$RECREATE_XAHAU_FILES" == "true" ]; then
-
+    if [ ! -f "$NODE_CONFIG_FILE" ] || [ "$RECREATE_XAHAU_FILES" == "true" ]; then
+        # save ip_fixed setting 1st, so as to retain the official list (so it works for mainnet or testnet)
+        if [ -z "${NODE_IPS_FIXED:-}" ]; then NODE_IPS_FIXED=$(sed -n '/^\[ips_fixed\]/,/^$/ {/^$/q; /^\[ips_fixed\]/!{/^$/!p}}' $NODE_CONFIG_FILE); fi
+        if [ -z "${NODE_IPS_FIXED:-}" ]; then
+            echo "found \"ips_fixed\" empty, using fallback values"
+            if [ "$NODE_CHAIN_NAME" = "mainnet" ]; then 
+                NODE_IPS_FIXED="bacab.alloy.ee 21337"
+            elif [ "$NODE_CHAIN_NAME" = "testnet" ]; then
+                NODE_IPS_FIXED="# TN7  nHBoJCE3wPgkTcrNPMHyTJFQ2t77EyCAqcBRspFCpL6JhwCm94VZ
+79.110.60.122 21338
+# TN8  nHUVv4g47bFMySAZFUKVaXUYEmfiUExSoY4FzwXULNwJRzju4XnQ
+79.110.60.124 21338
+# TN9  nHBvr8avSFTz4TFxZvvi4rEJZZtyqE3J6KAAcVWVtifsE7edPM7q
+79.110.60.125 21338
+# TN10 nHUH3Z8TRU57zetHbEPr1ynyrJhxQCwrJvNjr4j1SMjYADyW1WWe
+79.110.60.121 21338"
+            fi
+        fi
         sudo rm -f $NODE_CONFIG_FILE > /dev/null
         sudo rm -f -r /opt/xahaud/db > /dev/null
         if [[ "$NODE_TYPE" == "nodeHistory" || "$NODE_TYPE" == "validatorHistory" ]]; then 
@@ -650,7 +806,7 @@ $NODE_PEERS
 ip_limit = 1024
 
 [network_id]
-21337
+$VARVAL_CHAIN_PEER
 
 [server]
 port_peer
@@ -660,7 +816,7 @@ port_rpc_public
 port_ws_public
 
 [port_peer]
-port = 21337
+port = $VARVAL_CHAIN_PEER
 ip = 0.0.0.0
 protocol = peer
 
@@ -728,13 +884,15 @@ pool.ntp.org
 0
 
 [ips_fixed]
-bacab.alloy.ee 21337
+$NODE_IPS_FIXED
 
 # For validators only
-# Add validator token stanza etc after this. Don't forget to restart
+
 [voting]
 account_reserve = 1000000
 owner_reserve = 200000
+
+# Add validator token stanza etc after this. Don't forget to restart
 
 EOF
 
@@ -859,11 +1017,9 @@ EOF
         if echo "$existing_crontab" | grep -q "$UPDATE_SCRIPT_PATH"; then
             existing_crontab=$(echo "$existing_crontab" | grep -v "$UPDATE_SCRIPT_PATH")
             existing_crontab="${existing_crontab}"$'\n'"${cron_job}"
-            echo "$existing_crontab" | crontab -
-            msg_ok "Auto Updater, updated cron tab tasks, system will now check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours"
+            echo "$existing_crontab" | crontab - && msg_ok "Auto Updater, updated cron tab tasks, system will now check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours" || msg_error "failed to add auto updater entry to crontab"
         else
-            (sudo crontab -l 2>&1 | { grep -v -E "^no crontab for|^sudo:" || true; } | echo "$cron_job") | sudo crontab -
-            msg_ok "Auto Updater, added new entry to cron tab tasks, system will check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours"
+            (sudo crontab -l 2>&1 | { grep -v -E "^no crontab for|^sudo:" || true; } ; echo "$cron_job") | sudo crontab - && msg_ok "Auto Updater, added new entry to cron tab tasks, system will check for updates every ${AUTOUPDATE_CHECK_INTERVAL} hours" || msg_error "failed to update auto updater entry to crontab"
         fi
     else
         msg_error "NOT adding AutoUpdate functions, due to AUTOUPDATE_XAHAUD set to ${AUTOUPDATE_XAHAUD} in xahl_node.vars file"
@@ -956,37 +1112,6 @@ FUNC_ENABLE_UFW(){
     sleep 2s
 }
 
-FUNC_CERTBOT_PRECHECK(){
-    echo
-    echo -e "${GREEN}#########################################################################${NC}"
-    echo 
-    echo -e "${GREEN}## ${YELLOW}Setup: Checking CERTBOT options... ${NC}"
-    echo
-    if [ -z "$INSTALL_CERTBOT_SSL" ]; then
-        read -e -p "Do you want to use install CERTBOT and use SSL? : true or false # " INSTALL_CERTBOT_SSL
-        sudo sed -i "s/^INSTALL_CERTBOT_SSL=.*/INSTALL_CERTBOT_SSL=\"$INSTALL_CERTBOT_SSL\"/" $SCRIPT_DIR/xahl_node.vars
-    fi
-    if [ "$INSTALL_CERTBOT_SSL" != "true" ]; then
-        echo
-        echo -e "${GREEN}## ${YELLOW}Setup: INSTALL_CERTBOT_SSL in .vars file set to Skip CERTBOT install... ${NC}"
-        echo
-        echo -e "${GREEN}#########################################################################${NC}"
-        echo
-        return
-    fi
-    echo
-
-    # Install Let's Encrypt Certbot
-    msg_info "installing certbot..."
-    sudo apt-get update >/dev/null 2>&1
-    sudo apt-get install certbot python3-certbot-nginx -y 2>&1 | awk '{ printf "\r\033[K   installing certbot.. "; printf "%s", $0; fflush() }'
-    msg_ok "certbot installed."
-    echo -e "${GREEN}#########################################################################${NC}"
-    echo
-    sleep 1s
-
-}
-
 FUNC_CERTBOT_REQUEST(){
     echo
     echo -e "${GREEN}#########################################################################${NC}"
@@ -1021,31 +1146,6 @@ FUNC_CERTBOT_REQUEST(){
     # and enable it to start at boot
     sudo systemctl enable nginx
 
-}
-
-FUNC_PROMPTS_4_DOMAINS_EMAILS() {
-    if [ -z "${USER_DOMAIN-}" ] || [ "$ALWAYS_ASK" == "true" ]; then
-        printf "${BLUE}Enter your servers domain (e.g. mydomain.com or a subdomain like xahau.mydomain.com )${NC} # "
-        read -e -i "${USER_DOMAIN-}" USER_DOMAIN
-        if sudo grep -q 'USER_DOMAIN=' "$SCRIPT_DIR/.env"; then
-            sudo sed -i "s/^USER_DOMAIN=.*/USER_DOMAIN=\"$USER_DOMAIN\"/" "$SCRIPT_DIR/.env"
-        else
-            sudo echo -e "USER_DOMAIN=\"$USER_DOMAIN\"" >> $SCRIPT_DIR/.env
-        fi
-    fi
-
-    # Prompt for CERT email if not provided as a variable
-    if [ -z "${CERT_EMAIL-}" ] || [ "$ALWAYS_ASK" == "true" ] || [ "$INSTALL_CERTBOT_SSL" == "true" ]; then
-        echo
-        printf "${BLUE}Enter your email address for certbot updates ${NC}# "
-        read -e -i "${CERT_EMAIL-}" CERT_EMAIL
-        if sudo grep -q 'CERT_EMAIL=' "$SCRIPT_DIR/.env"; then
-            sudo sed -i "s/^CERT_EMAIL=.*/CERT_EMAIL=\"$CERT_EMAIL\"/" "$SCRIPT_DIR/.env"
-        else
-            sudo echo -e "CERT_EMAIL=\"$CERT_EMAIL\"" >> $SCRIPT_DIR/.env
-        fi
-        echo
-    fi
 }
 
 
@@ -1964,10 +2064,12 @@ EOF
     if [ "$INSTALL_TOML_UPDATER" == "true" ]; then
         echo
         echo -e "${GREEN}## ${YELLOW}Setup: (re)downlaoding the .toml updater, and setting permissions ${NC}"
+        echo
         rm -f $SCRIPT_DIR/updater.py 2>/dev/null
         sudo wget -O $SCRIPT_DIR/toml_updater.py $TOMLUPDATER_URL && sudo chmod +x $SCRIPT_DIR/toml_updater.py
         
         echo -e "${GREEN}## ${YELLOW}Setup: adjusting .toml updater to local .vars settngs${NC}"
+        echo
         sudo sed -i "s|^\(toml_path = \).*|\1'$INSTALL_TOML_FILE'|" "$SCRIPT_DIR/toml_updater.py"
         sudo sed -i "s|^\(node_config_path = \).*|\1'$NODE_CONFIG_FILE'|" "$SCRIPT_DIR/toml_updater.py"
         sudo sed -i "s|^\(allowlist_path = \).*|\1'${SCRIPT_DIR}/${NGINX_ALLOWLIST_FILE}'|" "$SCRIPT_DIR/toml_updater.py"
@@ -1975,13 +2077,13 @@ EOF
 
         msg_info "setting up a crontab job, to run the toml_updater every 15 mins"
         cron_job="*/15 * * * * /usr/bin/python3 $SCRIPT_DIR/toml_updater.py"
-        if sudo crontab -l 2>/dev/null| grep -Fxq "$cron_job"; then
+        if sudo crontab -l 2>/dev/null | grep -Fxq "$cron_job"; then
             msg_ok "Cron job for .toml updater already exists. No changes made."
         else
-            (sudo crontab -l 2>&1 | { grep -v -E "^no crontab for|^sudo:" || true; } | sed '\|toml_updater.py|d' | sed '\|updater.py|d'; echo "$cron_job") | sudo crontab - && msg_ok "Cron job for .toml updater (re)added to run every 15mins successfully."
+            (sudo crontab -l 2>&1 | { grep -v -E "^no crontab for|^sudo:" || true; } | sed '\|toml_updater.py|d' | sed '\|updater.py|d'; echo "$cron_job") | sudo crontab - && msg_ok "Cron job for .toml updater added to run every 15mins successfully." || msg_error "failed to add toml updater to crontab"
         fi
 
-        # manually run the .toml uppdater to get fresh new data in file.
+        # manually run the .toml updater to get fresh new data in file.
         /usr/bin/python3 $SCRIPT_DIR/toml_updater.py
 
     else
@@ -1991,101 +2093,6 @@ EOF
     fi
 
     echo
-}
-
-
-FUNC_ALLOWLIST_CHECK(){
-    echo
-    echo -e "${GREEN}#########################################################################${NC}"
-    echo
-    echo -e "${GREEN}## ${YELLOW}Setup: checking/setting up IPs in ${BYELLOW}'$SCRIPT_DIR/$NGINX_ALLOWLIST_FILE'${NC} file...${NC}"
-    echo
-
-    # Get some source IPs
-    #current SSH session
-    if [[ -n "${SSH_CONNECTION-}" ]]; then
-        SSH_IP=$(echo $SSH_CONNECTION | awk '{print $1}')
-    else
-        SSH_IP="127.0.0.1"
-    fi
-    #this Nodes IP
-    NODE_IP=$(curl -s ipinfo.io/ip)
-    if [ -z "$NODE_IP" ]; then
-        NODE_IP="127.0.0.1"
-    fi
-    #dockers IP
-    #DCKR_HOST_IP=$(sudo docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $NODE_CHAIN_NAME_xinfinnetwork_1)
-    LOCAL_IP=$(hostname -I | awk '{print $1}')
-    if [ -z "$LOCAL_IP" ]; then
-        LOCAL_IP="127.0.0.1"
-    fi
-
-    echo "adding default IPs..."
-    echo
-    if ! grep -q "allow $SSH_IP;  # Detected IP of the SSH session" "$SCRIPT_DIR/$NGINX_ALLOWLIST_FILE"; then
-        echo "allow $SSH_IP;  # Detected IP of the SSH session" >> $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE
-        echo "added IP $SSH_IP;  # Detected IP of the SSH session"
-    else
-        echo "SSH session IP, $SSH_IP, already in list."
-    fi
-    if ! grep -q "allow $LOCAL_IP; # Local IP of server" "$SCRIPT_DIR/$NGINX_ALLOWLIST_FILE"; then
-        echo "allow $LOCAL_IP; # Local IP of server" >> $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE
-        echo "added IP $LOCAL_IP; # Local IP of the server"
-    else
-        echo "Local IP of the server, $LOCAL_IP, already in list."
-    fi
-    if ! grep -q "allow $NODE_IP;  # ExternalIP of the Node itself" "$SCRIPT_DIR/$NGINX_ALLOWLIST_FILE"; then
-        echo "allow $NODE_IP;  # ExternalIP of the Node itself" >> $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE
-        echo "added IP $NODE_IP;  # ExternalIP of the Node itself"
-    else
-        echo "External IP of the Node itself, $NODE_IP, already in list."
-    fi
-    echo
-
-    echo "capturing any IPs from a previous old type install, ready for the new type.."
-    OLD_ALLOWLIST=$(sed -n '/location \/ {/,/}/p' /etc/nginx/sites-available/xahau | grep -E --color=never 'allow [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+;' | sed 's/^[[:space:]]*//' || true)
-    if [ -n "$OLD_ALLOWLIST" ]; then
-        msg_ok "found allow list from past install, will add these to the allowlist;"
-        echo "$OLD_ALLOWLIST"
-        echo "$OLD_ALLOWLIST" >> $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE
-    else
-        echo "none found."
-    fi
-
-    echo
-    echo "Total IPs currently in the allowlist file is, $(grep -c "allow" $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE)"
-
-    echo
-    if [ "$ALWAYS_ASK" == "true" ]; then
-        echo -e "${BLUE}here you can add additional IPs to the Allowlist file..."
-        echo -e "if you want to disable the whitelist feature, add ip 0.0.0.0 ${NC}"
-        echo
-        while true; do
-            printf "${BLUE}Enter additional IP address (one at a time for example 10.0.0.20, or just press enter to skip) ${NC}# " 
-            read -e user_ip
-
-            # Validate the input using regex
-            # IPv4 regex
-            ipv4_regex='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
-
-            # IPv6 regex
-            ipv6_regex='^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$'
-
-            # Check if the input matches either the IPv4 or IPv6 pattern
-            if [[ $user_ip =~ $ipv4_regex ]] || [[ $user_ip =~ $ipv6_regex ]]; then
-                echo -e "${GREEN}IP address: ${YELLOW}$user_ip added to Allow list. ${NC}"
-                echo -e "allow $user_ip;" >> $SCRIPT_DIR/$NGINX_ALLOWLIST_FILE
-            else
-                if [ -z "$user_ip" ]; then
-                    break
-                else
-                    echo -e "${RED}Invalid IP address. Please try again. ${NC}"
-                fi
-            fi
-        done
-    fi
-    echo
-    sleep 2s
 }
 
 
@@ -2452,11 +2459,15 @@ FUNC_NODE_DEPLOY(){
     echo
     echo -e "${GREEN}#########################################################################${NC}"
     echo -e "${YELLOW}#########################################################################${NC}"
-    echo -e "${GREEN}${NC}"
-    echo -e "${GREEN}         Xahau ledger Node - Install${NC}"
-    echo -e "${GREEN}${NC}"
+    echo
+    echo -e "${GREEN}         Xahau ledger Node Installer ${NC}"
+    echo
     echo -e "${YELLOW}#########################################################################${NC}"
     echo -e "${GREEN}#########################################################################${NC}"
+    echo
+
+    # check to make sure user have correct root privledges to run all the things we need to run
+    FUNC_CHECK_PRIVILEGES;
 
     # check for .vars file, and set other variables
     FUNC_VARS_VARIABLE_CHECK;
@@ -2464,17 +2475,17 @@ FUNC_NODE_DEPLOY(){
     # installs updates, and default packages listed in vars file
     FUNC_PKG_CHECK;
 
-    # detect IPv6
-    FUNC_IPV6_CHECK;
-
-    # check setup mode
-    FUNC_SETUP_MODE;
-
-    # check/install CERTBOT (for SSL)
+    # check/install CERTBOT, with email questions
     FUNC_CERTBOT_PRECHECK;
 
     # prompts the user for domain name, and email address for cert_bot if needed 
     FUNC_PROMPTS_4_DOMAINS_EMAILS;
+
+    # check setup mode
+    FUNC_SETUP_MODE;
+
+    # detect IPv6
+    FUNC_IPV6_CHECK;
 
     # add/check allowList, ask for additional IPs if configured to do so
     FUNC_ALLOWLIST_CHECK;
