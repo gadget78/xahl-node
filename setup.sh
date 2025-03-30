@@ -495,17 +495,20 @@ FUNC_IPV6_CHECK(){
             echo -e "${YELLOW}IPv6 environment detected, checking hosts file.${NC}"
             IPv6="true"
             if ! grep -q "github" /etc/hosts; then
-                echo '2001:67c:27e4:1064::140.82.121.3 github.com www.github.com' | sudo tee -a /etc/hosts
+                echo "2001:67c:27e4:1064::140.82.121.3 github.com www.github.com" | sudo tee -a /etc/hosts
                 echo -e "${YELLOW}Updated hosts file.${NC}"
             fi
         elif [ "$IPv6" == "true" ]; then
             echo -e "${YELLOW}IPv6 environment being forced by .var file, checking hosts file.${NC}"
             if ! grep -q "github" /etc/hosts; then
-                echo '2001:67c:27e4:1064::140.82.121.3 github.com www.github.com' | sudo tee -a /etc/hosts
+                echo "2001:67c:27e4:1064::140.82.121.3 github.com www.github.com" | sudo tee -a /etc/hosts
                 echo -e "${YELLOW}Updated hosts file.${NC}"
             fi
+        elif [ "$IPv6" == "false" ]; then
+            echo -e "${YELLOW}IPv6 setting on false in .var file. checking and fixing hosts file${NC}"
+            sudo sed -i '/2001:67c:27e4:1064::140.82.121.3 github.com www.github.com/d' /etc/hosts
         else
-            echo -e "${YELLOW}Not an exclusive IPv6 enviroment.${NC}"
+            echo -e "${YELLOW}Not an exclusive IPv6 environment.${NC}"
         fi
     fi
 }
