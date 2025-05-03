@@ -415,9 +415,9 @@ FUNC_CERTBOT_PRECHECK(){
 
 
 FUNC_PROMPTS_4_DOMAINS_EMAILS() {
-    if [ -z "${USER_DOMAIN-}" ] || [ "$ALWAYS_ASK" == "true" ]; then
+    if [ -z "${USER_DOMAIN:-}" ] || [ "$ALWAYS_ASK" == "true" ]; then
         printf "${BLUE}Enter your servers domain (e.g. mydomain.com or a subdomain like xahau.mydomain.com )${NC} # "
-        read -e -i "${USER_DOMAIN-}" USER_DOMAIN
+        read -e -i "${USER_DOMAIN:-}" USER_DOMAIN
         if sudo grep -q 'USER_DOMAIN=' "$SCRIPT_DIR/.env"; then
             sudo sed -i "s/^USER_DOMAIN=.*/USER_DOMAIN=\"$USER_DOMAIN\"/" "$SCRIPT_DIR/.env"
         else
@@ -426,10 +426,10 @@ FUNC_PROMPTS_4_DOMAINS_EMAILS() {
     fi
 
     # Prompt for CERT email if not provided as a variable
-    if [ -z "${CERT_EMAIL-}" ] || [ "$ALWAYS_ASK" == "true" ] || [ "$INSTALL_CERTBOT_SSL" == "true" ]; then
+    if [ -z "${CERT_EMAIL:-}" ] || [ "$ALWAYS_ASK" == "true" ] || [ "$INSTALL_CERTBOT_SSL" == "true" ]; then
         echo
         printf "${BLUE}Enter your email address for certbot updates ${NC}# "
-        read -e -i "${CERT_EMAIL-}" CERT_EMAIL
+        read -e -i "${CERT_EMAIL:-}" CERT_EMAIL
         if sudo grep -q 'CERT_EMAIL=' "$SCRIPT_DIR/.env"; then
             sudo sed -i "s/^CERT_EMAIL=.*/CERT_EMAIL=\"$CERT_EMAIL\"/" "$SCRIPT_DIR/.env"
         else
@@ -522,7 +522,7 @@ FUNC_ALLOWLIST_CHECK(){
 
     # Get some source IPs
     #current SSH session
-    if [[ -n "${SSH_CONNECTION-}" ]]; then
+    if [[ -n "${SSH_CONNECTION:-}" ]]; then
         SSH_IP=$(echo $SSH_CONNECTION | awk '{print $1}')
     else
         SSH_IP="127.0.0.1"
@@ -2010,10 +2010,10 @@ EOF
     if [ "$INSTALL_TOML" == "true" ]; then
         
         # Prompt for user email if not provided as a variable
-        if [ -z "${TOML_EMAIL-}" ] || [ "$ALWAYS_ASK" == "true" ]; then
+        if [ -z "${TOML_EMAIL:-}" ] || [ "$ALWAYS_ASK" == "true" ]; then
             echo
             printf "${BLUE}Enter your email address for the PUBLIC .toml file ${NC}# "
-            read -e -i "${TOML_EMAIL-}" TOML_EMAIL
+            read -e -i "${TOML_EMAIL:-}" TOML_EMAIL
             sudo sed -i "s/^TOML_EMAIL=.*/TOML_EMAIL=\"$TOML_EMAIL\"/" $SCRIPT_DIR/.env
             if sudo grep -q 'TOML_EMAIL=' "$SCRIPT_DIR/.env"; then
                 sudo sed -i "s/^TOML_EMAIL=.*/TOML_EMAIL=\"$TOML_EMAIL\"/" "$SCRIPT_DIR/.env"
