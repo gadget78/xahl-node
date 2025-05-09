@@ -1,5 +1,5 @@
 #!/bin/bash
-version=0.99
+version=1.1
 
 ###################################################################################
 # setup color, message, variables, and functions for script.
@@ -42,7 +42,7 @@ export -f spinner
 
 msg_info() {
     if [[ -n "$SPINNER_PID" ]] && ps -p "$SPINNER_PID" >/dev/null 2>&1; then
-      kill "$SPINNER_PID" > /dev/null
+      kill "$SPINNER_PID" > /dev/null || true
       if [[ -t 1 ]]; then printf "\e[?25h"; fi # Show cursor
     fi
     local msg="$1"
@@ -56,7 +56,7 @@ export -f msg_info
 
 msg_ok() {
   if [[ -n "${SPINNER_PID// }" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then 
-    kill $SPINNER_PID > /dev/null
+    kill $SPINNER_PID > /dev/null || true
     if [[ -t 1 ]]; then printf "\e[?25h"; fi # Show cursor
   fi
   local msg="$1"
@@ -66,7 +66,7 @@ export -f msg_ok
 
 msg_error() {
   if [[ -n "${SPINNER_PID// }" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then
-    kill $SPINNER_PID > /dev/null
+    kill $SPINNER_PID > /dev/null || true
     if [[ -t 1 ]]; then printf "\e[?25h"; fi # Show cursor
   fi
   local msg="$1"
@@ -83,7 +83,7 @@ trap SIGINT_EXIT SIGINT
 error_handler() {
     # clear
     if [[ -n "${SPINNER_PID// }" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then
-        kill $SPINNER_PID > /dev/null
+        kill $SPINNER_PID > /dev/null || true
     fi
     if [[ -t 1 ]]; then printf "\e[?25h"; fi # Show cursor
     local exit_code="$?"
@@ -95,13 +95,13 @@ error_handler() {
 }
 cleanup() {
     if [[ -n "${SPINNER_PID// }" ]] && ps -p $SPINNER_PID >/dev/null 2>&1; then
-        kill $SPINNER_PID > /dev/null
+        kill $SPINNER_PID > /dev/null || true
     fi
     if [[ -t 1 ]]; then printf "\e[?25h"; fi # Show cursor
     popd >/dev/null
     sudo sh -c 'rm -f /etc/sudoers.d/node_setup'
     sudo rm -rf $TEMP_DIR
-    stty sane
+    [ -t 0 ] && stty sane 2>/dev/null || true
 }
 exit-script() {
     cleanup
@@ -147,7 +147,7 @@ FUNC_CHECK_PRIVILEGES(){
     fi
 
     if [ "$(id -u)" -eq 0 ]; then
-        msg_ok "Privileges checked, user ${GN}/"${USER_ID}/"${DGN} has sudo privileges, continuing to install in directory ${GN}$SCRIPT_DIR${CL}"
+        msg_ok "Privileges checked, user ${GN}/"${USER_ID}/"${CL}${DGN} has sudo privileges, continuing to install in directory ${GN}$SCRIPT_DIR${CL}"
 
     elif sudo -l > /dev/null 2>&1; then
 
@@ -210,6 +210,7 @@ INSTALL_TOML_FILE="/home/www/.well-known/xahau.toml"
 INSTALL_TOML_UPDATER="true"
 RECREATE_NGINX_FILES="true"
 RECREATE_XAHAU_FILES="true"
+USE_SYSTEMCTL="true"
 DISPLAY_FULL_LOG="false"
 
 # ipv6 can be set to auto (default), true or false, auto uses command ip a | grep -c 'inet6.*::1/128'
@@ -264,7 +265,7 @@ if [ -z "${vars_version:-}" ] || [ "$vars_version" == "0.8.6" ] || [ "$vars_vers
     msg_info "old version of xahl-node.vars found... "
 fi
 
-if echo "${vars_version:-}" | awk '{ exit !($1 < 0.97) }'; then
+if echo "${vars_version:-}" | awk '{ exit !($1 < 1) }'; then
     msg_info "xahl_node.vars file needs updating, will import old variables..."
     sudo rm -f $SCRIPT_DIR/xahl_node.vars
     sudo cat <<EOF > $SCRIPT_DIR/xahl_node.vars
@@ -300,6 +301,7 @@ INSTALL_TOML_FILE="${INSTALL_TOML_FILE:-/home/www/.well-known/xahau.toml}"
 INSTALL_TOML_UPDATER="${INSTALL_TOML_UPDATER:-true}"
 RECREATE_NGINX_FILES="${RECREATE_NGINX_FILES:-true}"
 RECREATE_XAHAU_FILES="${RECREATE_XAHAU_FILES:-true}"
+USE_SYSTEMCTL="${USE_SYSTEMCTL:-true}"
 DISPLAY_FULL_LOG="${DISPLAY_FULL_LOG:-false}"
 
 # ipv6 can be set to auto (default), true or false, auto uses command ip a | grep -c 'inet6.*::1/128'
@@ -310,7 +312,7 @@ IPv6="${IPv6:-auto}"
 # *** as these are for the script and nginx setups
 
 # system packages that the main script depends on;
-SYS_PACKAGES="(net-tools git curl gpg nano cron python3 python3-requests python3-toml whois htop sysstat apache2-utils)"
+SYS_PACKAGES="(net-tools iproute2 git curl gpg nano cron python3 python3-requests python3-toml whois htop sysstat apache2-utils)"
 
 # variables for nginx
 NGX_CONF_ENABLED="${NGX_CONF_ENABLED:-/etc/nginx/sites-enabled/}"
@@ -340,7 +342,7 @@ UPDATE_SCRIPT_PATH="${UPDATE_SCRIPT_PATH:-/usr/local/bin/\$UPDATE_SCRIPT_NAME}"
 LOG_DIR="${LOG_DIR:-/opt/xahaud/log}"
 LOG_FILE="${LOG_FILE:-\$LOG_DIR/update.log}"
 EOF
-    msg_ok "xahl_node.vars file updated to ${vars_version}."
+    msg_ok "xahl_node.vars file updated to ${version}."
 else
     msg_ok "xahl_node.vars file version is ${vars_version}. all checks complete."
 fi
@@ -394,7 +396,7 @@ FUNC_CERTBOT_PRECHECK(){
         sudo sed -i "s/^INSTALL_CERTBOT_SSL=.*/INSTALL_CERTBOT_SSL=\"$INSTALL_CERTBOT_SSL\"/" $SCRIPT_DIR/xahl_node.vars
     fi
     if [ "$INSTALL_CERTBOT_SSL" != "true" ]; then
-        echo -e "${GREEN}## ${YELLOW}INSTALL_CERTBOT_SSL in .vars file set to Skip CERTBOT install... ${NC}"
+        echo -e "${GREEN}## ${YELLOW}INSTALL_CERTBOT_SSL in .vars file not set to true, skipping CERTBOT install... ${NC}"
         echo
         echo -e "${GREEN}#########################################################################${NC}"
         echo
@@ -490,26 +492,24 @@ FUNC_SETUP_MODE(){
 
 
 FUNC_IPV6_CHECK(){
-    if [ "$IPv6" != "false" ]; then
-        if ! ping -c 1 -4 github.com &> /dev/null && ip a | grep -q 'inet6.*::1/128'; then
-            echo -e "${YELLOW}IPv6 environment detected, checking hosts file.${NC}"
-            IPv6="true"
-            if ! grep -q "github" /etc/hosts; then
-                echo "2001:67c:27e4:1064::140.82.121.3 github.com www.github.com" | sudo tee -a /etc/hosts
-                echo -e "${YELLOW}Updated hosts file.${NC}"
-            fi
-        elif [ "$IPv6" == "true" ]; then
-            echo -e "${YELLOW}IPv6 environment being forced by .var file, checking hosts file.${NC}"
-            if ! grep -q "github" /etc/hosts; then
-                echo "2001:67c:27e4:1064::140.82.121.3 github.com www.github.com" | sudo tee -a /etc/hosts
-                echo -e "${YELLOW}Updated hosts file.${NC}"
-            fi
-        elif [ "$IPv6" == "false" ]; then
-            echo -e "${YELLOW}IPv6 setting on false in .var file. checking and fixing hosts file${NC}"
-            sudo sed -i '/2001:67c:27e4:1064::140.82.121.3 github.com www.github.com/d' /etc/hosts
-        else
-            echo -e "${YELLOW}Not an exclusive IPv6 environment.${NC}"
+    if ! curl -v -4 https://github.com &> /dev/null && ip a | grep -q 'inet6.*::1/128' && [ "$IPv6" != "false" ] ; then
+        echo -e "${YELLOW}IPv6 environment detected, checking and updating hosts file.${NC}"
+        IPv6="true"
+        if ! grep -q "github" /etc/hosts; then
+            echo "2001:67c:27e4:1064::140.82.121.3 github.com www.github.com" | sudo tee -a /etc/hosts
+            echo -e "${YELLOW}Updated hosts file.${NC}"
         fi
+    elif [ "$IPv6" == "true" ]; then
+        echo -e "${YELLOW}IPv6 environment being forced by .var file, checking hosts file.${NC}"
+        if ! grep -q "github" /etc/hosts; then
+            echo "2001:67c:27e4:1064::140.82.121.3 github.com www.github.com" | sudo tee -a /etc/hosts
+            echo -e "${YELLOW}Updated hosts file.${NC}"
+        fi
+    elif [ "$IPv6" == "false" ]; then
+        echo -e "${YELLOW}IPv6 setting on false in .var file. checking and fixing hosts file${NC}"
+        sudo sed "/2001:67c:27e4:1064::140.82.121.3 github.com www.github.com/d" /etc/hosts | sudo tee /etc/hosts > /dev/null
+    else
+        echo -e "${YELLOW}Not an exclusive IPv6 environment.${NC}"
     fi
 }
 
@@ -741,16 +741,20 @@ FUNC_CLONE_NODE_SETUP(){
     if [ ! -d "$VARVAL_CHAIN_REPO" ]; then
         echo -e "Creating directory '$SCRIPT_DIR/$VARVAL_CHAIN_REPO' to use for xahaud installation..."
         echo -e "Cloning repo https://github.com/Xahau/$VARVAL_CHAIN_REPO' ${NC}"
-        git clone https://github.com/Xahau/$VARVAL_CHAIN_REPO
+        sudo git clone https://github.com/Xahau/$VARVAL_CHAIN_REPO
     else
         echo "existing directory '$SCRIPT_DIR/$VARVAL_CHAIN_REPO' found, pulling updates..."
         cd $SCRIPT_DIR/$VARVAL_CHAIN_REPO
-        git pull
+        sudo git pull
     fi
     if [ -d "/opt/xahaud/" ]; then
         echo "previous xahaud node install found,"
         echo "will stop existing xahaud, and check for updates..."
-        sudo systemctl stop xahaud
+        if [ "$USE_SYSTEMCTL" == "true" ]; then
+            sudo systemctl stop xahaud
+        else
+            if pgrep -x "xahaud" > /dev/null; then pkill -9 xahaud; fi
+        fi
     fi
 
     if [ "$RECREATE_XAHAU_FILES" == "true" ] && [ -n "$NODE_CONFIG_FILE" ]; then sudo rm -f $(dirname "$NODE_CONFIG_FILE")/*.* > /dev/null; fi
@@ -912,7 +916,12 @@ EOF
     fi
 
     echo "restarting xahaud service"
-    sudo systemctl restart xahaud.service
+    if [ "$USE_SYSTEMCTL" == "true" ]; then
+        sudo systemctl restart xahaud.service
+    else
+        if pgrep -x "xahaud" > /dev/null; then pkill -9 xahaud; fi
+        sudo xahaud --start > /dev/null 2>&1 &
+    fi
     
     echo
     echo -e "${GREEN}## Finished Xahau Node install ...${NC}"
@@ -935,7 +944,7 @@ FUNC_XAHAUD_UPDATER(){
         sudo mkdir -p "$LOG_DIR"
 
         # Copy the provided update script to /usr/local/bin
-        sudo cat << 'EOF' > "$UPDATE_SCRIPT_PATH"
+        sudo cat << EOF > "$UPDATE_SCRIPT_PATH"
 #!/bin/bash
 # Copy this file to /usr/local/bin as root
 # make it executable - chmod +x /usr/local/bin/root
@@ -946,8 +955,8 @@ SCREEN_OUTPUT=false
 
 # Parse command-line options
 while getopts "v:s" opt; do
-case $opt in
-    v) VERSION=$OPTARG ;;
+case \$opt in
+    v) VERSION=\$OPTARG ;;
     s) SCREEN_OUTPUT=true ;;
 esac
 done
@@ -957,54 +966,60 @@ URL="https://build.xahau.tech/"
 BASE_DIR=/opt/xahaud
 USER=xahaud
 PROGRAM=xahaud
-BIN_DIR=$BASE_DIR/bin
-DL_DIR=$BASE_DIR/downloads
-LOG_DIR=$BASE_DIR/log
-SCRIPT_LOG_FILE=$LOG_DIR/update.log
-SERVICE_NAME="$PROGRAM.service"
+BIN_DIR=\$BASE_DIR/bin
+DL_DIR=\$BASE_DIR/downloads
+LOG_DIR=\$BASE_DIR/log
+SCRIPT_LOG_FILE=\$LOG_DIR/update.log
+SERVICE_NAME="\$PROGRAM.service"
+USE_SYSTEMCTL="${USE_SYSTEMCTL}"
 
 log() {
-local message="$1"
-echo "$(date +"%Y-%m-%d %H:%M:%S") $message" >> "$SCRIPT_LOG_FILE"
-if [ "$SCREEN_OUTPUT" = true ]; then
-    echo "$message"
+local message="\$1"
+echo "\$(date +"%Y-%m-%d %H:%M:%S") \$message" >> "\$SCRIPT_LOG_FILE"
+if [ "\$SCREEN_OUTPUT" = true ]; then
+    echo "\$message"
 fi
 }
 
 # Ensure the script runs as root
-[[ $EUID -ne 0 ]] && exit 1
+[[ \$EUID -ne 0 ]] && exit 1
 
 # Fetch and Sort version
-if [[ "$VERSION" == "latest" ]]; then
+if [[ "\$VERSION" == "latest" ]]; then
 version_filter="release"
 else
-version_filter=$VERSION
+version_filter=\$VERSION
 fi
-version_file=$(curl "${URL}" 2>/dev/null | grep $version_filter | grep -v releaseinfo | sed -E 's/(<a href[^>]*?>).*/\1/g' | sed -E 's/(^[^"]+"|"[^"]+$)//g' | sort -t'B' -k2n -n | tail -n 1)
+version_file=\$(curl "\${URL}" 2>/dev/null | grep \$version_filter | grep -v releaseinfo | sed -E 's/(<a href[^>]*?>).*/\1/g' | sed -E 's/(^[^"]+"|"[^"]+$)//g' | sort -t'B' -k2n -n | tail -n 1)
 
-if [[ -z "$version_file" ]]; then
+if [[ -z "\$version_file" ]]; then
 log "error: unable to obtain or filter update list"
 exit 0
 fi
 
-log "Newest Update file found: $version_file"
+log "Newest Update file found: \$version_file"
 
-if [[ ! -f "$DL_DIR/$version_file" ]]; then
-curl --silent --fail "${URL}${version_file}" -o "$DL_DIR/$version_file"
-chmod +x "$DL_DIR/$version_file"
-chown $USER:$USER "$DL_DIR/$version_file"
-log "Downloaded $version_file"
+if [[ ! -f "\$DL_DIR/\$version_file" ]]; then
+curl --silent --fail "\${URL}\${version_file}" -o "\$DL_DIR/\$version_file"
+chmod +x "\$DL_DIR/\$version_file"
+chown \$USER:\$USER "\$DL_DIR/\$version_file"
+log "Downloaded \$version_file"
 fi
 
-current_file=$(readlink "$BIN_DIR/$PROGRAM")
-if [[ "$current_file" != "$DL_DIR/$version_file" ]]; then
+current_file=\$(readlink "\$BIN_DIR/\$PROGRAM")
+if [[ "\$current_file" != "\$DL_DIR/\$version_file" ]]; then
 log "Update available: Yes, linking and setting up"
-ln -snf "$DL_DIR/$version_file" "$BIN_DIR/$PROGRAM"
-log "Symlink updated to $version_file"
+ln -snf "\$DL_DIR/\$version_file" "\$BIN_DIR/\$PROGRAM"
+log "Symlink updated to \$version_file"
 
 # Restart the service using systemctl
-log "Restarting $SERVICE_NAME"
-systemctl restart $SERVICE_NAME
+log "Restarting \$SERVICE_NAME"
+if [ "\$USE_SYSTEMCTL" == "true" ]; then
+    systemctl restart \$SERVICE_NAME
+else
+    if pgrep -x "\$SERVICE_NAME" > /dev/null; then pkill -9 \$SERVICE_NAME; fi
+    sudo \$SERVICE_NAME --start &
+fi
 
 log "Update available: update sequence finished"
 else
@@ -1108,9 +1123,7 @@ FUNC_ENABLE_UFW(){
     echo 
     echo -e "${GREEN}## ${YELLOW}Setup: (re)Enable Firewall...${NC}"
     echo 
-    sudo systemctl start ufw && sudo systemctl status ufw --no-page
     echo "y" | sudo ufw enable
-    #sudo ufw enable
     sudo ufw status verbose --no-page
     sleep 2s
 }
@@ -1136,18 +1149,31 @@ FUNC_CERTBOT_REQUEST(){
     echo -e "${GREEN}#########################################################################${NC}"
     sleep 2s
 
-    # Start/Reload Nginx to apply all the new configuration
-    if sudo systemctl is-active --quiet nginx; then
-        # Nginx is running, so reload its configuration
-        sudo systemctl reload nginx
-        echo "Nginx reloaded."
+    if [ "$USE_SYSTEMCTL" == "true" ]; then
+        # Start/Reload Nginx to apply all the new configuration
+        if sudo systemctl is-active --quiet nginx; then
+            # Nginx is running, so reload its configuration
+            sudo systemctl reload nginx
+            echo "Nginx reloaded."
+        else
+            # Nginx is not running, starting it
+            sudo systemctl start nginx
+            echo "Nginx started."
+        fi
+        # and enable it to start at boot
+        sudo systemctl enable nginx
     else
-        # Nginx is not running, starting it
-        sudo systemctl start nginx
-        echo "Nginx started."
+        # Start/Reload Nginx without systemctl
+        if pgrep "nginx" > /dev/null; then
+            # Nginx is running, reload config
+            nginx -s reload
+            echo "Nginx reloaded."
+        else
+            # Nginx is not running, start it
+            nginx & 
+            echo "Nginx started."
+        fi
     fi
-    # and enable it to start at boot
-    sudo systemctl enable nginx
 
 }
 
@@ -1171,7 +1197,13 @@ FUNC_INSTALL_LANDINGPAGE(){
         sudo mkdir -p ${INSTALL_LANDINGPAGE_PATH}
         echo "created ${INSTALL_LANDINGPAGE_PATH} directory for webfiles, now re-installing webpage"
 
-        sudo cat <<EOF > ${INSTALL_LANDINGPAGE_PATH}/index.html
+ awk -v version="$version" -v user_domain="$USER_DOMAIN" '
+    {
+        gsub("{{version}}", version);
+        gsub("{{USER_DOMAIN}}", user_domain);
+        print
+    }
+' <<'EOF' > ${INSTALL_LANDINGPAGE_PATH}/index.html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1253,7 +1285,7 @@ iframe {
     background-color: #1a1a1a;
 }
 
-.serverinfo {
+.serverStatus {
     color: #555;
     max-width: 400px;
     margin: 0 auto;
@@ -1264,7 +1296,7 @@ iframe {
     text-align: left;
 }
 
-.serverinfo span {
+.serverStatus span {
     color: white; 
 }
 
@@ -1282,6 +1314,37 @@ iframe {
     overflow: auto;
     text-align: left;
 }
+
+.toml, .json {
+    background: #181818;
+    border: 2px solid #fff;
+    border-radius: 10px;
+    max-width: 400px;
+    margin: 20px auto 0 auto;
+    padding: 20px;
+    color: #fff;
+    font-family: 'Fira Mono', 'Consolas', 'Menlo', 'Monaco', monospace;
+    font-size: 14px;
+    overflow-x: auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    text-align: left;
+}
+
+.toml-section { color: #f0c040; font-weight: bold; }
+.toml-key { color: #6ab0f3; }
+.toml-string { color: #e1aaff; }
+.toml-number { color: #33c6ba; }
+.toml-boolean { color: #859900; }
+.toml-comment { color: #93a1a1; }
+.toml-array { color: #b58900; }
+.toml-inline-table { color: #6c71c4; }
+.toml-date { color: #33c6ba; }
+
+.json-key { color: #569cd6; }
+.json-string { color: #e1aaff }
+.json-number { color: #b5cea8; }
+.json-boolean { color: #569cd6; }
+.json-punctuation { color: #d4d4d4; }
 
 footer {
     display: flex;
@@ -1313,14 +1376,14 @@ footer a:hover {
 
 <body>
 <div id="content">
-    <h1>Xahau Node Landing Page</h1>
+    <h1>XahauNode LandingPage</h1>
 <!--    <div class="tab-buttons" id="tab-buttons">
         <button class="tab-button active" onclick="openTab('tab1')">Server Info</button>
         <button class="tab-button" id="tab2-button" onclick="openTab('tab2')">Uptime Kuma</button>
         </div>
 -->
     <div id="tab1" class="tab active">
-        <div class="serverinfo">
+        <div class="serverStatus">
             <p>Status: <span id="status">loading server data..</span></p>
             <p>Server State: <span id="serverstate">loading server data..</span></p>
             <p>full transitions: <span id="statecount">no full count yet..</span></p>
@@ -1334,13 +1397,19 @@ footer a:hover {
             <p>Last Refresh: <span id="time">...</span></p>
             <canvas id="myChart">...</canvas>
         </div>
-    
-        <pre id="rawoutput"><h1>Raw .toml file</h1><span id="rawTOML"></span></pre>
-    
-        <pre id="rawoutput"><h1>xahaud server_info</h1><span id="serverInfo"></span></pre>
+        
+        <div id="toml" class="toml" >
+            <div style="font-weight:bold;font-size:16px;margin-bottom:8px;">raw .toml file</div>
+            <div id="rawTOML" ></div>
+        </div>
+
+        <div id="json" class="json" >
+            <div style="font-weight:bold;font-size:16px;margin-bottom:8px;">xahaud server_info</div>
+            <div id="serverInfo" ></div>
+        </div>
     </div>
     <div id="tab2" class="tab">
-        <iframe id="tab2-iframe" src="https://$USER_DOMAIN/uptime/status/evernode/" frameborder="0" allowtransparency="yes"></iframe>
+        <iframe id="tab2-iframe" src="https://{{USER_DOMAIN}}/uptime/status/evernode/" frameborder="0" allowtransparency="yes"></iframe>
     </div>
 </div>
 
@@ -1361,7 +1430,7 @@ footer a:hover {
     let timeLabels;
     let fullCount;
     let wssConnects;
-    const version = "$version";
+    const version = "{{version}}";
     document.getElementById('version').textContent = version;
     
     document.addEventListener('DOMContentLoaded', function() {
@@ -1400,7 +1469,7 @@ footer a:hover {
         for (var i = 0; i < buttons.length; i++) {
             buttons[i].classList.remove('active');
         }
-        document.querySelector(\`[onclick="openTab('\${tabId}')"]\`).classList.add('active');
+        document.querySelector(`[onclick="openTab('${tabId}')"]`).classList.add('active');
     }
 
     async function parseValue(value) {
@@ -1434,13 +1503,85 @@ footer a:hover {
         });
         return json;
     }
+
+    function highlightTOML(tomlText) {
+        // Step 1: Escape HTML special characters
+        let escaped = tomlText
+            .replace(/&/g, '&')
+            .replace(/</g, '<')
+            .replace(/>/g, '>');
+
+        // Step 2: Highlight TOML syntax
+        escaped = escaped
+            // Comments (handle first)
+            .replace(/(^|\n)([^"\n]*?)#(.*)$/gm, '$1$2<span class="toml-comment">#$3</span>')
+
+            // Multiline strings
+            .replace(/("""[\s\S]*?"""|'''[\s\S]*?''')/g, '<span class="toml-string">$1</span>')
+
+            // Single-line strings
+            .replace(/([=,\[]\s*)(["'])((?:\\.|[^\\])*?)\2(?=\s*[,}\]\n]|$)/g, '$1<span class="toml-string">$2$3$2</span>')
+
+            // Headers (e.g., [table], [[table]], [a.b.c])
+            .replace(/^(\s*\[+\s*[^\]\s][^\]]*?\s*\]+)\s*$/gm, '<span class="toml-section">$1</span>')
+
+            // Keys
+            .replace(/(\n|^)(\s*)([^#\s=[]+|"[^"]*")\s*=\s*/g, '$1$2<span class="toml-key">$3</span> = ')
+
+            // Arrays
+            .replace(/(\[\s*(?:(?:-?\d+\.?\d*|true|false|"[^"]*"|'[^']*'|[{}\w\s,.-]+)\s*,?\s*)+\])/g, '<span class="toml-array">$1</span>')
+
+            // Inline tables
+            .replace(/({[^{}]*})/g, '<span class="toml-inline-table">$1</span>')
+
+            // Dates
+            .replace(/(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))?)/g, '<span class="toml-date">$1</span>')
+
+            // Numbers
+            .replace(/([-+]?\d+\.?\d*(?:[eE][-+]?\d+)?)/g, '<span class="toml-number">$1</span>')
+
+            // Booleans
+            .replace(/\b(true|false)\b/g, '<span class="toml-boolean">$1</span>');
+
+        // Step 3: Wrap in <pre> tag
+        return `<pre>${escaped}</pre>`;
+    }
+
+
+    function highlightJSON(jsonText) {
+        // Step 1: Escape HTML special characters
+        let escaped = jsonText
+            .replace(/&/g, '&')
+            .replace(/</g, '<')
+            .replace(/>/g, '>');
+
+        // Step 2: Highlight JSON syntax
+        escaped = escaped
+            // Keys (e.g., "key":) - Match before strings to avoid overlap
+            .replace(/([{\[,]\s*)("((?:[^"\\]|\\.)*)")\s*:/g, '$1<span class="json-key">$2</span>:')
+
+            // Strings (e.g., "value") - Only match strings not followed by :
+            .replace(/([:,]\s*)("((?:[^"\\]|\\.)*)")(?!\s*:)/g, '$1<span class="json-string">$2</span>')
+
+            // Numbers (integers, floats, scientific notation)
+            .replace(/\b(-?\d+\.?\d*(?:[eE][-+]?\d+)?)\b(?!\s*:)/g, '<span class="json-number">$1</span>')
+
+            // Booleans and null
+            .replace(/\b(true|false|null)\b(?!\s*:)/g, '<span class="json-boolean">$1</span>')
+
+            // Brackets and commas
+            .replace(/([{}[\],])/g, '<span class="json-punctuation">$1</span>');
+
+        // Step 3: Wrap in <pre> tag
+        return `<pre class="json-dark">${escaped}</pre>`;
+    }
     
     async function fetchTOML() {
         try {
             const response = await fetch('.well-known/xahau.toml');
             const toml = await response.text();
             const parsedTOML = await parseTOML(toml);
-            document.getElementById('rawTOML').textContent = toml;
+            document.getElementById('rawTOML').innerHTML = highlightTOML(toml);
             document.getElementById('connections').textContent = await parsedTOML.STATUS.CONNECTIONS;
             document.getElementById('nodeType').textContent = await parsedTOML.STATUS.NODETYPE;
             document.getElementById('status').textContent = await parsedTOML.STATUS.STATUS || "failed, server could be down?";
@@ -1476,8 +1617,8 @@ footer a:hover {
             return response.json();
         })
         .then(serverInfo => {
-            const formattedJson = JSON.stringify(serverInfo, null, 2);
-            document.getElementById('serverInfo').textContent = formattedJson;
+            const formattedJson = JSON.stringify(serverInfo, null, 1);
+            document.getElementById('serverInfo').innerHTML  = highlightJSON(formattedJson)
             document.getElementById('serverstate').textContent = serverInfo.result.info.server_state;
             document.getElementById('statecount').textContent = serverInfo.result.info.state_accounting.full.transitions;
             document.getElementById('buildVersion').textContent = serverInfo.result.info.build_version;
@@ -1488,7 +1629,7 @@ footer a:hover {
             const days = Math.floor(uptimeInSeconds / 86400);
             const hours = Math.floor((uptimeInSeconds % 86400) / 3600);
             const minutes = Math.floor((uptimeInSeconds % 3600) / 60);
-            const formattedUptime = \`\${days} Days, \${hours.toString().padStart(2, '0')} Hours, and \${minutes.toString().padStart(2, '0')} Mins\`;
+            const formattedUptime = `${days} Days, ${hours.toString().padStart(2, '0')} Hours, and ${minutes.toString().padStart(2, '0')} Mins`;
             document.getElementById('uptime').textContent = formattedUptime;
             document.getElementById('time').textContent = serverInfo.result.info.time;
         })
@@ -1584,7 +1725,13 @@ EOF
         if [  -f ${INSTALL_LANDINGPAGE_PATH}/error/custom_403.html ]; then
             sudo rm -r ${INSTALL_LANDINGPAGE_PATH}/error/custom_403.html
         fi        
-        sudo cat <<EOF > ${INSTALL_LANDINGPAGE_PATH}/error/custom_403.html
+ awk -v version="$version" -v user_domain="$USER_DOMAIN" '
+    {
+        gsub("{{version}}", version);
+        gsub("{{USER_DOMAIN}}", user_domain);
+        print
+    }
+' <<'EOF' > ${INSTALL_LANDINGPAGE_PATH}/error/custom_403.html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1666,7 +1813,7 @@ iframe {
     background-color: #1a1a1a;
 }
 
-.serverinfo {
+.serverStatus {
     color: #555;
     max-width: 400px;
     margin: 0 auto;
@@ -1677,24 +1824,34 @@ iframe {
     text-align: left;
 }
 
-.serverinfo span {
+.serverStatus span {
     color: white; 
 }
 
-#rawoutput {
-    background-color: #1a1a1a;
-    padding: 20px;
+.toml, .json {
+    background: #181818;
+    border: 2px solid #fff;
     border-radius: 10px;
-    margin-top: 10px;
-    margin: 0 auto;
-    max-width: 600px;
-    color: #ffffff;
-    font-family: Arial, sans-serif;
+    max-width: 400px;
+    margin: 20px auto 0 auto;
+    padding: 20px;
+    color: #fff;
+    font-family: 'Fira Mono', 'Consolas', 'Menlo', 'Monaco', monospace;
     font-size: 14px;
-    white-space: pre-wrap;
-    overflow: auto;
+    overflow-x: auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     text-align: left;
 }
+
+.toml-section { color: #f0c040; font-weight: bold; }
+.toml-key { color: #6ab0f3; }
+.toml-string { color: #e1aaff; }
+.toml-number { color: #33c6ba; }
+.toml-boolean { color: #859900; }
+.toml-comment { color: #93a1a1; }
+.toml-array { color: #b58900; }
+.toml-inline-table { color: #6c71c4; }
+.toml-date { color: #33c6ba; }
 
 footer {
     display: flex;
@@ -1726,19 +1883,18 @@ footer a:hover {
 
 <body>
     <div id="content">
-        <h1>Xahau Node Landing Page</h1>
+        <h1>XahauNode LandingPage</h1>
 <!--    <div class="tab-buttons" id="tab-buttons">
         <button class="tab-button active" onclick="openTab('tab1')">Server Info</button>
         <button class="tab-button" id="tab2-button" onclick="openTab('tab2')">Uptime Kuma</button>
         </div>
 -->
         <div id="tab1" class="tab active">
-            <div class="serverinfo">
+            <div class="serverStatus">
                 <h1>Server Info</h1>
                 <p><span style="color: orange;">your IP has restricted access</span></p>
                 <p>YourIP: <span id="realip"></p>
                 <p>X-Real-IP: <span id="xrealip"></p>
-                <p>Contact Email:</p>
                 <p></p>
             
                 <p>Status: <span id="status">loading toml file..</span></p>
@@ -1754,10 +1910,14 @@ footer a:hover {
                 <canvas id="myChart">...</canvas>
             </div>
         
-            <pre id="rawoutput"><h1>raw .toml file</h1><span id="rawTOML">loading .toml file...</spam></pre>
+            <div id="toml" class="toml" >
+                <div style="font-weight:bold;font-size:16px;margin-bottom:8px;">raw .toml file</div>
+                <div id="rawTOML" ></div>
+            </div>
         </div>
+
         <div id="tab2" class="tab">
-            <iframe id="tab2-iframe" src="https://$USER_DOMAIN/uptime/status/evernode/" frameborder="0" allowtransparency="yes"></iframe>
+            <iframe id="tab2-iframe" src="https://{{USER_DOMAIN}}/uptime/status/evernode/" frameborder="0" allowtransparency="yes"></iframe>
         </div>
     </div>
 
@@ -1778,7 +1938,7 @@ footer a:hover {
     let timeLabels;
     let fullCount;
     let wssConnects;
-    const version = "$version";
+    const version = "{{version}}";
     document.getElementById('version').textContent = version;
 
     document.addEventListener('DOMContentLoaded', function() {
@@ -1817,7 +1977,7 @@ footer a:hover {
         for (var i = 0; i < buttons.length; i++) {
             buttons[i].classList.remove('active');
         }
-        document.querySelector(\`[onclick="openTab('\${tabId}')"]\`).classList.add('active');
+        document.querySelector(`[onclick="openTab('${tabId}')"]`).classList.add('active');
     }
 
     async function parseValue(value) {
@@ -1851,6 +2011,49 @@ footer a:hover {
         });
         return json;
     }
+
+    function highlightTOML(tomlText) {
+        // Step 1: Escape HTML special characters
+        let escaped = tomlText
+            .replace(/&/g, '&')
+            .replace(/</g, '<')
+            .replace(/>/g, '>');
+
+        // Step 2: Highlight TOML syntax
+        escaped = escaped
+            // Comments (handle first)
+            .replace(/(^|\n)([^"\n]*?)#(.*)$/gm, '$1$2<span class="toml-comment">#$3</span>')
+
+            // Multiline strings
+            .replace(/("""[\s\S]*?"""|'''[\s\S]*?''')/g, '<span class="toml-string">$1</span>')
+
+            // Single-line strings
+            .replace(/([=,\[]\s*)(["'])((?:\\.|[^\\])*?)\2(?=\s*[,}\]\n]|$)/g, '$1<span class="toml-string">$2$3$2</span>')
+
+            // Headers (e.g., [table], [[table]], [a.b.c])
+            .replace(/^(\s*\[+\s*[^\]\s][^\]]*?\s*\]+)\s*$/gm, '<span class="toml-section">$1</span>')
+
+            // Keys
+            .replace(/(\n|^)(\s*)([^#\s=[]+|"[^"]*")\s*=\s*/g, '$1$2<span class="toml-key">$3</span> = ')
+
+            // Arrays
+            .replace(/(\[\s*(?:(?:-?\d+\.?\d*|true|false|"[^"]*"|'[^']*'|[{}\w\s,.-]+)\s*,?\s*)+\])/g, '<span class="toml-array">$1</span>')
+
+            // Inline tables
+            .replace(/({[^{}]*})/g, '<span class="toml-inline-table">$1</span>')
+
+            // Dates
+            .replace(/(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))?)/g, '<span class="toml-date">$1</span>')
+
+            // Numbers
+            .replace(/([-+]?\d+\.?\d*(?:[eE][-+]?\d+)?)/g, '<span class="toml-number">$1</span>')
+
+            // Booleans
+            .replace(/\b(true|false)\b/g, '<span class="toml-boolean">$1</span>');
+
+        // Step 3: Wrap in <pre> tag
+        return `<pre>${escaped}</pre>`;
+    }
     
     async function fetchTOML() {
         try {
@@ -1858,7 +2061,7 @@ footer a:hover {
             const toml = await response.text();
             parsedTOML = await parseTOML(toml);
             document.getElementById('xrealip').textContent = response.headers.get('X-Real-IP');
-            document.getElementById('rawTOML').textContent = toml;
+            document.getElementById('rawTOML').innerHTML = highlightTOML(toml);
         } catch (error) {
             document.getElementById('status').textContent = "Unable to retrieve .toml file";
             console.error('Error Retriving .toml file:', error);
@@ -1879,7 +2082,7 @@ footer a:hover {
                 document.getElementById('connections').textContent = await parsedTOML.STATUS.CONNECTIONS;
                 document.getElementById('peers').textContent = await parsedTOML.STATUS.PEERS;
                 document.getElementById('currentLedger').textContent = await parsedTOML.STATUS.CURRENTLEDGER;
-                document.getElementById('completedLedgers').textContent = await parsedTOML.STATUS.LEDGERS;
+                document.getElementById('completedLedgers').textContent = await parsedTOML.STATUS.SAVED_LEDGERS;
                 document.getElementById('nodeType').textContent = await parsedTOML.STATUS.NODETYPE;
                 document.getElementById('uptime').textContent = await parsedTOML.STATUS.UPTIME;
                 document.getElementById('time').textContent = days+"days "+hours+"hours and "+mins+"mins ago";
@@ -2146,8 +2349,33 @@ FUNC_NGINX_CLEAR_RECREATE() {
         sudo touch $NGX_CONF_NEW/xahau
         sudo chmod 666 $NGX_CONF_NEW/xahau
         
-        if [ "$INSTALL_CERTBOT_SSL" == "true" ] && [ -f /etc/letsencrypt/live/$USER_DOMAIN/privkey.pem ]; then
-        echo -e "${GREEN}## ${YELLOW}Setup: previous SSL files found, installing SSL type .conf file... ${NC}"
+        if [[ "$INSTALL_CERTBOT_SSL" == "true" || "$INSTALL_CERTBOT_SSL" == "nginx" ]] && [[ -f /etc/letsencrypt/live/$USER_DOMAIN/privkey.pem ]]; then
+            if [ "$INSTALL_CERTBOT_SSL" == "nginx" ]; then
+                echo -e "${GREEN}## ${YELLOW}Setup: SSL files found, installing SSL type nginx .conf files with no certbot control... ${NC}"
+                sudo wget -O /etc/letsencrypt/ssl-dhparams.pem https://ssl-config.mozilla.org/ffdhe2048.txt || msg_error "failed to download ssl-dhparams.pem file"
+                sudo cat <<EOF > /etc/letsencrypt/options-ssl-nginx.conf
+# /etc/nginx/ssl-params.conf
+ssl_session_cache shared:SSL:10m;
+ssl_session_timeout 24h;
+ssl_session_tickets off;
+
+# Enable only TLS 1.2+ (disable TLS 1.0/1.1 and SSLv3)
+ssl_protocols TLSv1.2 TLSv1.3;
+
+# Prefer server ciphers for better security
+ssl_prefer_server_ciphers on;
+
+# Modern cipher suites (prioritize ECDHE for Forward Secrecy)
+ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384";
+
+# Enable OCSP stapling for faster SSL handshake
+ssl_stapling on;
+ssl_stapling_verify on;
+EOF
+            else
+                echo -e "${GREEN}## ${YELLOW}Setup: SSL files present via certbot, installing SSL type .conf file... ${NC}"
+            fi
+
             sudo cat <<EOF > $NGX_CONF_NEW/xahau
 set_real_ip_from $NGINX_PROXY_IP;
 real_ip_header X-Real-IP;

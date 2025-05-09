@@ -45,12 +45,14 @@ and supplements it with the necessary configuration to provide a TLS secured RPC
         - 4.any rpc traffic (when using POST for API use)
         - 5.public access to .toml file
    - TL;DR; you only need ONE (A record) domain pointing to this server (no need to any CNAME setups)
-   - Automatically detects the IPs of your ssh session, the node itself, and its local enviroment then adds them to the nginx_allowlist.conf file
+   - Automatically detects the IPs of your ssh session, the node itself, and its local environment then adds them to the nginx_allowlist.conf file
    - checks for updates every 24 hours
    - also now works behind another nginx/NPM front end see [Nginx related](#nginx-related) section
    - IPv6 support (auto detect by default, can be forced via .vars setting)
    - adds a simple `update` to the command line, so you can update easily
    - Applies NIST security best practices
+ - additional Dockerfiles and entry point file have now been added to this repo, so you can create your own docker image.
+ - or use the prebuilt docker image at [/gadget78/xahau-node:latest](https://hub.docker.com/r/gadget78/xahau-node)
  
 ---
 
@@ -74,15 +76,15 @@ it will be after the "capturing any IPs from a previous old type install, ready 
 
 where it should then give you a confirmation of "found allow list from past install, will add these to the allowlist;" and list the found IPs
 
-if not these can be added either manually (one at a time) at this point, or afterwards as a pasted in block to the file nginx_allowlist.conf
+if these are not detected, or you hav them saved previously, you can add IPs either manually (one at a time) at this point, or afterwards as a pasted in block to the file nginx_allowlist.conf
 
 ### only needs a single domain name
 
-so in older versions, you would need two to three "domain names", comprising of 1 A record (using a IP) and 2 CNAMES (using names) 
+so in older versions, you would of needed two to three "(sub)domain names", comprising of 1 A record (using a IP) and 2 CNAMES (using names) 
 
-this build only needs ONE, 
+this build now only needs ONE, 
 
-and that ONE domain can be a root domain, like `youdomain.com`, or a subdomain, like `subdomain.yourdomain.com` or say `wss.yourdomain.com`
+and that ONE domain can be a root domain, like `youdomain.com`, or a subdomain, like `subdomain.yourdomain.com` or stay with the old type domain `wss.yourdomain.com`
 
 this ONE domain does need to be a "A Record", so thats a domain that points to a specified IP, that IP being the public IP of your Xahau Node.
 
@@ -104,9 +106,9 @@ copy, and run this simple command...
 
 setup will go through a series of questions (in blue) and output all info along the way
 
-one of the questions, for example, is to enter IPs that will form a "allow list" which you do one at a time, once finished, submit a blank entry to move on.
+one of the questions in the setup, for example, is to enter IPs that will form a "allow list" which you do one at a time, once finished, submit a blank entry to move on.
 
-when setup is finished asking questions, and outputting progress, it will give a some info on how to check its working with the IP or URls that now in use.
+when setup is finished asking questions, and outputting progress, it will give a some info on how to check its working with the IP or URls that are now in use.
 
 also shows you where the new `nginx_allowlist.conf` file is. just in case you need to enter more in future (where you will need to issue command `nginx -s reload` after any edits)
 
@@ -129,6 +131,10 @@ now install with
 
 (if you want to force a different script install directory, prefix with `SCRIPT_DIR="/new/path/here"` if not default will be "$HOME"/xahl-node)
 
+## alternative install method via Docker
+
+you can use the docker image to install. [/gadget78/xahau-node:latest](https://hub.docker.com/r/gadget78/xahau-node)
+
 ### config files
 
 #### .vars file
@@ -145,11 +151,12 @@ there are MANY things that can be adjusted, the main ones are;
 - `INSTALL_UPDATES` - "true" this setting can be used to turn off the checking/installing of linux updates, and default install packages
 - `VARVAL_CHAIN_NAME` - "mainnet" this is the main "mode" of setup, can be either mainnet, or testnet
 - `INSTALL_UFW` - "true" chose to install or not (in environments that do not have UFW installed in as standard)
-- `INSTALL_CERTBOT_SSL` - "true" VERY useful if you need SSL to be handled upstream, like Nginx Proxy Manager for example.
+- `INSTALL_CERTBOT_SSL` - "true" to let certbot handle it, "false" to be handled upstream, like Nginx Proxy Manager, or "nginx" if you want to place the files manually.
 - `INSTALL_LANDINGPAGE` - "true" so you can switch off the landing page generation, if you have editing default one.
 - `INSTALL_TOML` - "true" so you can switch of .toml file generation, if you have manually edited it
 - `RECREATE_NGINX_FILES` - "true" this will recreate the nginx files, updating and fixing any issues
 - `RECREATE_XAHAU_FILES` - "true" this will recreate all xahau files (xahaud.cfg, and validators-xahau.txt files), updating and fixing issues
+- `USE_SYSTEMCTL` - "true" to use systemctl, or false to use other methods (useful for docker environments)
 
 #### .env file
 

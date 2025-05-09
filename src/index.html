@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Xahau Node</title>
+    <link rel="icon" href="https://2820133511-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2Fm6f29os4wP16vCS4lHNh%2Ficon%2FeZDp8sEXSQQTJfGGITkj%2Fxahau-icon-yellow.png?alt=media&amp;token=b911e9ea-ee58-409c-939c-c28c293c9adb" type="image/png" media="(prefers-color-scheme: dark)">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.min.js"></script>
+</head>
+
+<style>
+body {
+    background-color: #121212;
+    color: #ffffff;
+    font-family: Arial, sans-serif;
+    padding: 20px;
+    margin: 2;
+    text-align: center;
+}
+
+h1 {
+    color: white; 
+    font-size: 30px;
+    margin-bottom: 10px;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.42);
+}
+
+.tab-buttons {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 5px;
+}
+
+.tab-buttons button {
+    padding: 10px 20px;
+    cursor: pointer;
+    border: 1px solid #ffffff;
+    border-radius: 5px;
+    margin: 0 5px;
+    font-size: 26px;
+    color: #ffffff;
+    background-color: #221902;
+}
+
+.tab-buttons button.active {
+    background-color: #f0c040;
+    color: #000;
+}
+
+.tab {
+    display: none;
+    height: 100%;
+    width: 100%;
+}
+
+.tab.active {
+    display: block;
+    height: 100%;
+    width: 100%;
+}
+
+#content {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.tab-content {
+    height: 100%;
+    width: 100%;
+}
+
+iframe {
+    width: 100%;
+    height: 600px;
+    border: none;
+    border-radius: 10px;
+    background-color: #1a1a1a;
+}
+
+.serverStatus {
+    color: #555;
+    max-width: 400px;
+    margin: 0 auto;
+    margin-bottom: 20px;
+    padding: 20px;
+    border: 2px solid #ffffff;
+    border-radius: 10px;
+    text-align: left;
+}
+
+.serverStatus span {
+    color: white; 
+}
+
+#rawoutput {
+    background-color: #1a1a1a;
+    padding: 20px;
+    border-radius: 10px;
+    margin-top: 10px;
+    margin: 0 auto;
+    max-width: 600px;
+    color: #ffffff;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    white-space: pre-wrap;
+    overflow: auto;
+    text-align: left;
+}
+
+.toml, .json {
+    background: #181818;
+    border: 2px solid #fff;
+    border-radius: 10px;
+    max-width: 400px;
+    margin: 20px auto 0 auto;
+    padding: 20px;
+    color: #fff;
+    font-family: 'Fira Mono', 'Consolas', 'Menlo', 'Monaco', monospace;
+    font-size: 14px;
+    overflow-x: auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    text-align: left;
+}
+
+.toml-section { color: #f0c040; font-weight: bold; }
+.toml-key { color: #6ab0f3; }
+.toml-string { color: #e1aaff; }
+.toml-number { color: #33c6ba; }
+.toml-boolean { color: #859900; }
+.toml-comment { color: #93a1a1; }
+.toml-array { color: #b58900; }
+.toml-inline-table { color: #6c71c4; }
+.toml-date { color: #33c6ba; }
+
+.json-key { color: #569cd6; }
+.json-string { color: #e1aaff }
+.json-number { color: #b5cea8; }
+.json-boolean { color: #569cd6; }
+.json-punctuation { color: #d4d4d4; }
+
+footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    padding: 10px 20px;
+    background-color: #1a1a1a;
+    color: #ffffff;
+}
+
+footer a {
+    color: #ffffff;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+footer a:hover {
+    color: #f0c040;
+}
+
+.footer-icon {
+    width: 20px;
+    height: 20px;
+    vertical-align: middle;
+    margin-right: 5px;
+}
+</style>
+
+<body>
+<div id="content">
+    <h1>XahauNode LandingPage</h1>
+<!--    <div class="tab-buttons" id="tab-buttons">
+        <button class="tab-button active" onclick="openTab('tab1')">Server Info</button>
+        <button class="tab-button" id="tab2-button" onclick="openTab('tab2')">Uptime Kuma</button>
+        </div>
+-->
+    <div id="tab1" class="tab active">
+        <div class="serverStatus">
+            <p>Status: <span id="status">loading server data..</span></p>
+            <p>Server State: <span id="serverstate">loading server data..</span></p>
+            <p>full transitions: <span id="statecount">no full count yet..</span></p>
+            <p>Build Version: <span id="buildVersion">...</span></p>
+            <p>Connected Websockets: <span id="connections">loading toml..</span></p>
+            <p>Connected peers: <span id="peers">...</span></p>
+            <p>Current Ledger: <span id="currentLedger">...</span></p>
+            <p>Complete Ledgers: <span id="completeLedgers">...</span></p>
+            <p>Node type: <span id="nodeType">...</span></p>
+            <p>UpTime: <span id="uptime">...</span></p>
+            <p>Last Refresh: <span id="time">...</span></p>
+            <canvas id="myChart">...</canvas>
+        </div>
+        
+        <div id="toml" class="toml" >
+            <div style="font-weight:bold;font-size:16px;margin-bottom:8px;">raw .toml file</div>
+            <div id="rawTOML" ></div>
+        </div>
+
+        <div id="json" class="json" >
+            <div style="font-weight:bold;font-size:16px;margin-bottom:8px;">xahaud server_info</div>
+            <div id="serverInfo" ></div>
+        </div>
+    </div>
+    <div id="tab2" class="tab">
+        <iframe id="tab2-iframe" src="https://$USER_DOMAIN/uptime/status/evernode/" frameborder="0" allowtransparency="yes"></iframe>
+    </div>
+</div>
+
+<footer>
+    <div>
+        <a href="https://github.com/gadget78/xahl-node" target="_blank">
+            <img src="https://github.com/fluidicon.png" alt="GitHub" class="footer-icon">
+            install script by gadget78, fork it on GitHub.
+        </a>
+    </div>
+    <div>Version: <span id="version"></span></div>
+</footer>
+
+<script>
+    let percentageCPU;
+    let percentageRAM;
+    let percentageHDD;
+    let timeLabels;
+    let fullCount;
+    let wssConnects;
+    const version = "$version";
+    document.getElementById('version').textContent = version;
+    
+    document.addEventListener('DOMContentLoaded', function() {
+            var iframe = document.getElementById('tab2-iframe');
+
+            iframe.onload = function() {
+                var iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
+
+                // Check if the body contains the text '502' or any custom message set by the server for 502 errors
+                if ((iframeDocument.body && iframeDocument.body.innerText.includes('502')) || 
+    (iframeDocument.body && iframeDocument.body.innerText.includes('refuse'))) {
+                    console.error('502 Error detected');
+                    document.getElementById('tab-buttons').style.display = 'none';
+                    document.getElementById('tab2-iframe').style.display = 'none';
+                } else {
+                    document.getElementById('tab-buttons').style.display = 'flex';
+                }
+            };
+
+            // Handle generic errors, if any (for network issues or the iframe src not reachable)
+            iframe.onerror = function() {
+                console.error('Error loading iframe content');
+                document.getElementById('tab-buttons').style.display = 'none';
+                document.getElementById('tab2-iframe').style.display = 'none';
+            };
+        });
+
+    function openTab(tabId) {
+        var tabs = document.getElementsByClassName('tab');
+        for (var i = 0; i < tabs.length; i++) {
+            tabs[i].classList.remove('active');
+        }
+        document.getElementById(tabId).classList.add('active');
+
+        var buttons = document.getElementsByClassName('tab-button');
+        for (var i = 0; i < buttons.length; i++) {
+            buttons[i].classList.remove('active');
+        }
+        document.querySelector(`[onclick="openTab('${tabId}')"]`).classList.add('active');
+    }
+
+    async function parseValue(value) {
+        if (value.startsWith('"') && value.endsWith('"')) {
+        return value.slice(1, -1);
+        }
+        if (value === "true" || value === "false") {
+        return value === "true";
+        }
+        if (!isNaN(value)) {
+        return parseFloat(value);
+        }
+        return value;
+    }
+
+    async function parseTOML(tomlString) {
+        const json = {};
+        let currentSection = json;
+        tomlString.split("\n").forEach((line) => {
+        line = line.split("#")[0].trim();
+        if (!line) return;
+
+        if (line.startsWith("[")) {
+            const section = line.replace(/[\[\]]/g, "");
+            json[section] = {};
+            currentSection = json[section];
+        } else {
+            const [key, value] = line.split("=").map((s) => s.trim());
+            currentSection[key] = parseValue(value);
+        }
+        });
+        return json;
+    }
+
+    function highlightTOML(tomlText) {
+        // Step 1: Escape HTML special characters
+        let escaped = tomlText
+            .replace(/&/g, '&')
+            .replace(/</g, '<')
+            .replace(/>/g, '>');
+
+        // Step 2: Highlight TOML syntax
+        escaped = escaped
+            // Comments (handle first)
+            .replace(/(^|\n)([^"\n]*?)#(.*)$/gm, '$1$2<span class="toml-comment">#$3</span>')
+
+            // Multiline strings
+            .replace(/("""[\s\S]*?"""|'''[\s\S]*?''')/g, '<span class="toml-string">$1</span>')
+
+            // Single-line strings
+            .replace(/([=,\[]\s*)(["'])((?:\\.|[^\\])*?)\2(?=\s*[,}\]\n]|$)/g, '$1<span class="toml-string">$2$3$2</span>')
+
+            // Headers (e.g., [table], [[table]], [a.b.c])
+            .replace(/^(\s*\[+\s*[^\]\s][^\]]*?\s*\]+)\s*$/gm, '<span class="toml-section">$1</span>')
+
+            // Keys
+            .replace(/(\n|^)(\s*)([^#\s=[]+|"[^"]*")\s*=\s*/g, '$1$2<span class="toml-key">$3</span> = ')
+
+            // Arrays
+            .replace(/(\[\s*(?:(?:-?\d+\.?\d*|true|false|"[^"]*"|'[^']*'|[{}\w\s,.-]+)\s*,?\s*)+\])/g, '<span class="toml-array">$1</span>')
+
+            // Inline tables
+            .replace(/({[^{}]*})/g, '<span class="toml-inline-table">$1</span>')
+
+            // Dates
+            .replace(/(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))?)/g, '<span class="toml-date">$1</span>')
+
+            // Numbers
+            .replace(/([-+]?\d+\.?\d*(?:[eE][-+]?\d+)?)/g, '<span class="toml-number">$1</span>')
+
+            // Booleans
+            .replace(/\b(true|false)\b/g, '<span class="toml-boolean">$1</span>');
+
+        // Step 3: Wrap in <pre> tag
+        return `<pre>${escaped}</pre>`;
+    }
+
+
+    function highlightJSON(jsonText) {
+        // Step 1: Escape HTML special characters
+        let escaped = jsonText
+            .replace(/&/g, '&')
+            .replace(/</g, '<')
+            .replace(/>/g, '>');
+
+        // Step 2: Highlight JSON syntax
+        escaped = escaped
+            // Keys (e.g., "key":) - Match before strings to avoid overlap
+            .replace(/([{\[,]\s*)("((?:[^"\\]|\\.)*)")\s*:/g, '$1<span class="json-key">$2</span>:')
+
+            // Strings (e.g., "value") - Only match strings not followed by :
+            .replace(/([:,]\s*)("((?:[^"\\]|\\.)*)")(?!\s*:)/g, '$1<span class="json-string">$2</span>')
+
+            // Numbers (integers, floats, scientific notation)
+            .replace(/\b(-?\d+\.?\d*(?:[eE][-+]?\d+)?)\b(?!\s*:)/g, '<span class="json-number">$1</span>')
+
+            // Booleans and null
+            .replace(/\b(true|false|null)\b(?!\s*:)/g, '<span class="json-boolean">$1</span>')
+
+            // Brackets and commas
+            .replace(/([{}[\],])/g, '<span class="json-punctuation">$1</span>');
+
+        // Step 3: Wrap in <pre> tag
+        return `<pre class="json-dark">${escaped}</pre>`;
+    }
+    
+    async function fetchTOML() {
+        try {
+            const response = await fetch('.well-known/xahau.toml');
+            const toml = await response.text();
+            const parsedTOML = await parseTOML(toml);
+            document.getElementById('rawTOML').innerHTML = highlightTOML(toml);
+            document.getElementById('connections').textContent = await parsedTOML.STATUS.CONNECTIONS;
+            document.getElementById('nodeType').textContent = await parsedTOML.STATUS.NODETYPE;
+            document.getElementById('status').textContent = await parsedTOML.STATUS.STATUS || "failed, server could be down?";
+            percentageCPU = await parsedTOML.STATUS.CPU;
+            percentageCPU = percentageCPU.replace("[", "").replace("]", "").split(",");
+            percentageRAM = await parsedTOML.STATUS.RAM;
+            percentageRAM = percentageRAM.replace("[", "").replace("]", "").split(",");
+            percentageHDD = await parsedTOML.STATUS.HDD;
+            percentageHDD = percentageHDD.replace("[", "").replace("]", "").split(",");
+            percentageHDD_IO = await parsedTOML.STATUS.HDD_IO;
+            percentageHDD_IO = percentageHDD_IO.replace("[", "").replace("]", "").split(",");
+            fullCount = await parsedTOML.STATUS.STATUS_COUNT;
+            fullCount = fullCount.replace("[", "").replace("]", "").split(",");
+            wssConnects = await parsedTOML.STATUS.WSS_CONNECTS;
+            wssConnects = wssConnects.replace("[", "").replace("]", "").split(",");
+            timeLabels = await parsedTOML.STATUS.TIME;
+            timeLabels = timeLabels.replace("[", "").replace("]", "").split(",");
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    }
+
+    async function fetchSERVERINFO() {
+        const dataToSend = {"method":"server_info"};
+        await fetch('/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(dataToSend)
+        })
+        .then(response => {
+            return response.json();
+        })
+        .then(serverInfo => {
+            const formattedJson = JSON.stringify(serverInfo, null, 1);
+            document.getElementById('serverInfo').innerHTML  = highlightJSON(formattedJson)
+            document.getElementById('serverstate').textContent = serverInfo.result.info.server_state;
+            document.getElementById('statecount').textContent = serverInfo.result.info.state_accounting.full.transitions;
+            document.getElementById('buildVersion').textContent = serverInfo.result.info.build_version;
+            document.getElementById('currentLedger').textContent = serverInfo.result.info.validated_ledger.seq || "not known yet";
+            document.getElementById('completeLedgers').textContent = serverInfo.result.info.complete_ledgers || "0";
+            document.getElementById('peers').textContent = serverInfo.result.info.peers || "0";
+            const uptimeInSeconds = serverInfo.result.info.uptime;
+            const days = Math.floor(uptimeInSeconds / 86400);
+            const hours = Math.floor((uptimeInSeconds % 86400) / 3600);
+            const minutes = Math.floor((uptimeInSeconds % 3600) / 60);
+            const formattedUptime = `${days} Days, ${hours.toString().padStart(2, '0')} Hours, and ${minutes.toString().padStart(2, '0')} Mins`;
+            document.getElementById('uptime').textContent = formattedUptime;
+            document.getElementById('time').textContent = serverInfo.result.info.time;
+        })
+        .catch(error => {
+            console.error('Error fetching server info:', error);
+            document.getElementById('status').textContent = "failed, server could be down";
+            document.getElementById('status').style.color = "red";
+        });
+    }
+
+    async function renderChart() {
+        await fetchTOML();
+        fetchSERVERINFO();
+
+        const ctx = document.getElementById('myChart').getContext('2d');
+        const myChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: timeLabels,
+                datasets: [{
+                    label: 'CPU(%)',
+                    data: percentageCPU,
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1,
+                    fill: false
+                },
+                {
+                    label: 'HDD(%)',
+                    data: percentageHDD,
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1,
+                    fill: false
+                },
+                {
+                    label: 'HDD IO(%)',
+                    data: percentageHDD_IO,
+                    borderColor: 'rgba(20, 106, 106, 1)',
+                    borderWidth: 1,
+                    fill: false
+                },
+                {
+                    label: 'RAM(%)',
+                    data: percentageRAM,
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1,
+                    fill: false
+                },
+                {
+                    label: 'Full Count',
+                    data: fullCount,
+                    borderColor: 'rgba(153, 102, 255, 1)',
+                    borderWidth: 1,
+                    fill: false
+                },
+                {
+                    label: 'WSS Connects',
+                    data: wssConnects,
+                    borderColor: 'rgba(255, 159, 64, 1)',
+                    borderWidth: 1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    },
+                    y: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Percentage/Count'
+                        },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+    renderChart();
+</script>
+</body>
+</html>
