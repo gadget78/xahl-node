@@ -24,14 +24,14 @@ RUN sed -i "s/^USE_SYSTEMCTL=.*/USE_SYSTEMCTL=\"false\"/" "/root/xahl-node/xahl_
 
 RUN echo "USER_DOMAIN=\"_\"" >> /root/xahl-node/.env
 
-RUN echo -e "TOML_EMAIL=\"blank@email.com\"" >> /root/xahl-node/.env
+RUN echo "TOML_EMAIL=\"blank@email.com\"" >> /root/xahl-node/.env
 
-RUN echo -e "CERT_EMAIL=\"blank@email.com\"" >> /root/xahl-node/.env
+RUN echo "CERT_EMAIL=\"blank@email.com\"" >> /root/xahl-node/.env
 
 RUN chmod +x /root/xahl-node/setup.sh 
 
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /root/xahl-node/entrypoint.sh
 
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/root/xahl-node/entrypoint.sh"]
 
 EXPOSE 22 80 443
